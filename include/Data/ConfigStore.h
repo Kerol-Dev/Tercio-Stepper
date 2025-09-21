@@ -13,6 +13,7 @@ struct AxisConfig
 
   // core motion
   uint16_t microsteps = 256;
+  uint16_t units = 0;
   bool encInvert = false;
   bool dirInvert = false;
   bool stealthChop = true;
@@ -33,7 +34,7 @@ struct AxisConfig
   // reserved
   uint32_t flags = 0;
 
-  uint32_t canArbId = 0x123;  // our arbitration ID on the bus
+  uint32_t canArbId = 0x001;  // our arbitration ID on the bus
   bool canIdExtended = false; // 11-bit (false) or 29-bit (true)
   uint16_t nodeId16 = 0x0042; // in-frame ID16
 };

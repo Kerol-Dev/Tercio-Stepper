@@ -1,110 +1,188 @@
 // -----------------------------------------------------------------------------
-// STM32G431 — CAN-FD Command Receiver on FDCAN1 (PA11 RX, PA12 TX)
-// Control frames on ID 0x123 (FD, 500 kbps nominal, 2.5 Mbps data (x5))
-// Does not initialize Debug (assumes you have a global 'Print& Debug' in Main.h)
-// IMPORTANT: Include <ACANFD_STM32.h> ONCE from your main .ino,
-//            and include <ACANFD_STM32_from_cpp.h> here.
+// CanCmdBus.cpp
+// Modular CAN-FD command bus for STM32 (Arduino/PlatformIO)
+// RX: Matches frames from your bridge: CAN data = [CMD][PAY...]
+// TX: Provides helpers to send [CMD][PAY...] frames (float/int/struct/raw)
 // -----------------------------------------------------------------------------
 #include <Arduino.h>
-#include <ACANFD_STM32.h>
+#include <ACANFD_STM32_from_cpp.h>
 #include <ACANFD_STM32_Settings.h>
+#include <ACANFD_STM32.h>
 #include "CanCmdBus.h"
-#include "Main.h"   // provides: extern Print& Debug;
 
-// ===== Configuration =====
-static constexpr uint32_t CAN_CTRL_ID       = 0x123;
-static constexpr uint8_t  CAN_CMD_PROTO_VER = 1;
+// ---------------- Config defaults ----------------
+static constexpr uint32_t CAN_CTRL_ID_MASK_DEFAULT = 0x000; // accept all
+static constexpr uint32_t CAN_CTRL_ID_FILT_DEFAULT = 0x000;
 
-// Pins (AF9)
-static constexpr uint8_t FDCAN1_RX_PIN = PA11;
-static constexpr uint8_t FDCAN1_TX_PIN = PA12;
+// Default pins for FDCAN1 on STM32G431 (AF9)
+#ifndef CANCMD_DEFAULT_RX_PIN
+#define CANCMD_DEFAULT_RX_PIN PA11
+#endif
+#ifndef CANCMD_DEFAULT_TX_PIN
+#define CANCMD_DEFAULT_TX_PIN PA12
+#endif
 
-// ===== Internal state =====
-static CanControlCallbacks s_cb;
+// ---------------- Internals ----------------
+namespace CanCmdBus {
 
-// ===== Helpers (safe LE reads) =====
-static inline bool rdU8 (const uint8_t* b, size_t len, size_t off, uint8_t& out) {
-  if (off + 1 > len) return false; out = b[off]; return true;
+static Print*       s_dbg      = nullptr;
+
+struct Entry { uint8_t cmd; Handler fn; };
+static Entry   s_table[CANCMD_MAX_HANDLERS];
+static uint8_t s_count   = 0;
+
+static uint16_t s_idFilter = (uint16_t)CAN_CTRL_ID_FILT_DEFAULT;
+static uint16_t s_idMask   = (uint16_t)CAN_CTRL_ID_MASK_DEFAULT;
+
+static uint16_t s_defaultTxId = 0x000; // default TX ID (can be changed)
+
+static inline void logln(const char* s)   { if (s_dbg) s_dbg->println(s); }
+static inline void log  (const char* s)   { if (s_dbg) s_dbg->print(s);   }
+static inline void logHex(uint32_t v)     { if (s_dbg) s_dbg->println(v, HEX); }
+static inline void logCmd(uint8_t c)      { if (s_dbg) { s_dbg->print("CMD 0x"); s_dbg->println(c, HEX); } }
+
+// Find index of cmd in table; returns existing index or 0xFF
+static uint8_t findIndex(uint8_t cmd) {
+  for (uint8_t i = 0; i < s_count; ++i) if (s_table[i].cmd == cmd) return i;
+  return 0xFF;
 }
-static inline bool rdF32(const uint8_t* b, size_t len, size_t off, float& out) {
-  if (off + 4 > len) return false; memcpy(&out, b + off, 4); return true;
+
+// Map arbitrary length to CAN-FD DLC step (we clamp to 0..64; your bridge uses <=32)
+static uint8_t lenToDLC(uint8_t n) {
+  static const uint8_t steps[] = {0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64};
+  for (uint8_t i = 0; i < sizeof(steps); ++i) {
+    if (n <= steps[i]) return steps[i];
+  }
+  return 64;
 }
 
-// ===== Dispatcher =====
-static void handleCommand(const CANFDMessage& m) {
-  if (m.id != CAN_CTRL_ID || m.len < 2) return; // Need opcode + version
+bool begin(uint32_t nominal_bps,
+           uint8_t  data_factor,
+           uint8_t  rxPin,
+           uint8_t  txPin,
+           bool     normalFD)
+{
+  // Configure timings
+  ACANFD_STM32_Settings settings(nominal_bps, (DataBitRateFactor)data_factor);
+  settings.mModuleMode = normalFD ? ACANFD_STM32_Settings::NORMAL_FD
+                                  : ACANFD_STM32_Settings::EXTERNAL_LOOP_BACK;
 
-  const uint8_t* d = m.data;
-  const size_t   n = m.len;
+  settings.mRxPin = (rxPin == 0xFF) ? (uint8_t)CANCMD_DEFAULT_RX_PIN : rxPin;
+  settings.mTxPin = (txPin == 0xFF) ? (uint8_t)CANCMD_DEFAULT_TX_PIN : txPin;
 
-  uint8_t opcode = 0, ver = 0;
-  if (!rdU8(d, n, 0, opcode) || !rdU8(d, n, 1, ver)) return;
-  if (ver != CAN_CMD_PROTO_VER) {
-    Debug.println("[CAN] Ignoring cmd: version mismatch");
-    return;
+  const uint32_t err = fdcan1.beginFD(settings);
+  if (err != 0) {
+    if (s_dbg) { s_dbg->print("FDCAN init error: 0x"); s_dbg->println(err, HEX); }
+    return false;
   }
 
-  Debug.print("[CAN] Cmd opcode=0x"); Debug.println(opcode, HEX);
+  // Clear registry
+  s_count = 0;
+  for (uint8_t i = 0; i < CANCMD_MAX_HANDLERS; ++i) { s_table[i].cmd = 0; s_table[i].fn = nullptr; }
 
-  switch (static_cast<CanCmd>(opcode)) {
-    case CanCmd::SET_TARGET_ANGLE: {
-      float rad;
-      if (rdF32(d, n, 2, rad) && s_cb.setTargetAngleRad) {
-        Debug.print("  SET_TARGET_ANGLE "); Debug.println(rad, 6);
-        s_cb.setTargetAngleRad(static_cast<double>(rad));
-      }
-    } break;
-
-    case CanCmd::SET_MAX_RPS: {
-      float rps;
-      if (rdF32(d, n, 2, rps) && s_cb.setMaxRps) {
-        Debug.print("  SET_MAX_RPS "); Debug.println(rps, 6);
-        s_cb.setMaxRps(rps);
-      }
-    } break;
-
-    case CanCmd::SET_PID: {
-      float kp, ki, kd;
-      if (rdF32(d, n, 2, kp) && rdF32(d, n, 6, ki) && rdF32(d, n, 10, kd) && s_cb.setPid) {
-        Debug.print("  SET_PID kp="); Debug.print(kp, 6);
-        Debug.print(" ki="); Debug.print(ki, 6);
-        Debug.print(" kd="); Debug.println(kd, 6);
-        s_cb.setPid(kp, ki, kd);
-      }
-    } break;
-
-    case CanCmd::SET_CURRENT: {
-      float amps;
-      if (rdF32(d, n, 2, amps) && s_cb.setCurrentLimit) {
-        Debug.print("  SET_CURRENT "); Debug.println(amps, 6);
-        s_cb.setCurrentLimit(amps); // units: amperes (e.g., 1.4 = 1.4 A)
-      }
-    } break;
-
-    default:
-      // Unknown opcode: ignore (extensible)
-      Debug.println("  Unknown opcode; ignoring");
-      break;
-  }
+  return true;
 }
 
-// ===== Public functions =====
-void CanCmd_SetCallbacks(const CanControlCallbacks& cb) { s_cb = cb; }
-
-void CanCmd_Begin() {
-  // 500 kbps nominal, 2.5 Mbps data (factor x5)
-  ACANFD_STM32_Settings settings(500000, DataBitRateFactor::x5);
-  settings.mModuleMode = ACANFD_STM32_Settings::NORMAL_FD; // real bus
-  settings.mRxPin = FDCAN1_RX_PIN;
-  settings.mTxPin = FDCAN1_TX_PIN;
-
-  // Start FDCAN (ignore error code here; app may decide to assert)
-  (void)fdcan1.beginFD(settings);
-}
-
-void CanCmd_Poll() {
+void poll() {
   CANFDMessage m;
+  // Drain RX FIFO quickly
   while (fdcan1.receiveFD0(m)) {
-    handleCommand(m);
+    // ID filter check (standard ID)
+    const uint16_t id = (uint16_t)(m.id & 0x7FF);
+    if ((id & s_idMask) != (s_idFilter & s_idMask)) {
+      continue; // not for us
+    }
+
+    if (m.len == 0) continue; // must have at least CMD
+    const uint8_t  cmd     = m.data[0];
+    const uint8_t* payload = &m.data[1];
+    const uint8_t  payLen  = (m.len > 1) ? (uint8_t)(m.len - 1) : 0;
+
+    // Dispatch
+    const uint8_t idx = findIndex(cmd);
+    if (idx == 0xFF || s_table[idx].fn == nullptr) {
+      if (s_dbg) { s_dbg->print("Unknown "); logCmd(cmd); }
+      continue;
+    }
+
+    CmdFrame cf;
+    cf.id      = id;
+    cf.cmd     = cmd;
+    cf.payload = payload;
+    cf.len     = payLen;
+
+    s_table[idx].fn(cf);
   }
 }
+
+bool registerHandler(uint8_t cmd, Handler fn) {
+  // If exists, overwrite
+  const uint8_t idx = findIndex(cmd);
+  if (idx != 0xFF) { s_table[idx].fn = fn; return true; }
+
+  // New entry
+  if (s_count >= CANCMD_MAX_HANDLERS) {
+    if (s_dbg) logln("Handler table full");
+    return false;
+  }
+  s_table[s_count].cmd = cmd;
+  s_table[s_count].fn  = fn;
+  s_count++;
+  return true;
+}
+
+void setIdFilter(uint16_t filter, uint16_t mask) {
+  s_idFilter = (uint16_t)(filter & 0x7FF); // standard 11-bit
+  s_idMask   = (uint16_t)(mask   & 0x7FF);
+}
+
+void setDebug(Print* dbg) { s_dbg = dbg; }
+
+void setDefaultTxId(uint16_t id) { s_defaultTxId = (uint16_t)(id & 0x7FF); }
+
+// ------------------------- TX helpers -------------------------
+bool send(uint16_t id, uint8_t cmd, const void* data, uint8_t len) {
+  // Build [CMD][PAY...] into CAN data
+  const uint8_t* p = (const uint8_t*)data;
+  uint8_t buf[64] = {0};        // zero so padding bytes are deterministic
+  buf[0] = cmd;
+
+  if (len > 0 && p != nullptr) {
+    // Clamp to 63 bytes because we already used 1 byte for CMD (max FD DLC 64)
+    if (len > 63) len = 63;
+    memcpy(&buf[1], p, len);
+  }
+
+  CANFDMessage m;
+  m.id  = (uint32_t)(id & 0x7FF);
+  m.len = lenToDLC((uint8_t)(1 + len));
+  memset(m.data, 0, sizeof(m.data));
+  memcpy(m.data, buf, (size_t)(1 + len));
+
+  const uint32_t st = fdcan1.tryToSendReturnStatusFD(m);
+  if (st != 0) {
+    if (s_dbg) { s_dbg->print("CAN TX error 0x"); s_dbg->println(st, HEX); }
+    return false;
+  }
+  return true;
+}
+
+bool sendDefault(uint8_t cmd, const void* data, uint8_t len) {
+  return send(s_defaultTxId, cmd, data, len);
+}
+
+bool sendF32(uint16_t id, uint8_t cmd, float value) {
+  return send(id, cmd, &value, 4);
+}
+bool sendF32(uint8_t cmd, float value) {
+  return send(s_defaultTxId, cmd, &value, 4);
+}
+
+bool sendI32(uint16_t id, uint8_t cmd, int32_t value) {
+  return send(id, cmd, &value, 4);
+}
+bool sendI32(uint8_t cmd, int32_t value) {
+  return send(s_defaultTxId, cmd, &value, 4);
+}
+
+} // namespace CanCmdBus
