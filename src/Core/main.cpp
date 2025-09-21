@@ -61,136 +61,161 @@ HardwareTimer Tim6(TIM6);
 static constexpr float CTRL_HZ = 20000.0f;
 static float DT_SEC = 1.0f / CTRL_HZ;
 static unsigned long lastms = 0; // Declare lastms as an unsigned long
+// ---- helpers ----
+static inline bool readBool01(const uint8_t *p, uint8_t len, uint8_t off, bool &out)
+{
+  uint8_t v;
+  if (!CanCmdBus::readU8(p, len, off, v))
+    return false;
+  out = (v != 0);
+  return true;
+}
+
+// ---- handlers ----
 
 static void setTarget(const CanCmdBus::CmdFrame &f)
 {
   float angle;
-  if (CanCmdBus::readF32(f.payload, f.len, 0, angle))
-  {
-    float adjustedAngle = angle;
-    switch (cfg.units)
-    {
-    case 0: // degrees
-      adjustedAngle = angle * DEG_TO_RAD;
-      break;
-    case 1: // radians
-      adjustedAngle = angle;
-      break;
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, angle))
+    return;
 
-    default:
-      break;
-    }
-    axis.setTargetAngleRad(adjustedAngle);
-  }
+  float rad = angle;
+  // units: 0=radians, 1=degrees
+  if (cfg.units == 1)
+    rad = angle * DEG_TO_RAD;
+
+  axis.setTargetAngleRad(rad);
 }
 
 static void setCurrentMA(const CanCmdBus::CmdFrame &f)
 {
-  uint32_t ma;
-  if (CanCmdBus::readU32(f.payload, f.len, 0, ma))
-  {
-    cfg.driver_mA = ma;
-    driver.rms_current(ma);
-    save(cfg);
-  }
+  uint16_t ma;
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, ma))
+    return;
+
+  // clamp to something sane for TMC2209
+  if (ma < 50)
+    ma = 50;
+  if (ma > 2000)
+    ma = 2000;
+
+  cfg.driver_mA = ma;
+  driver.rms_current(ma);
+  cfgStore.save(cfg);
 }
 
 static void setSpeedLimit(const CanCmdBus::CmdFrame &f)
 {
   float rps;
-  if (CanCmdBus::readF32(f.payload, f.len, 0, rps))
-  {
-    cfg.maxRPS = rps;
-    axis.setLimits(rps);
-    save(cfg);
-  }
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, rps))
+    return;
+
+  // optional clamp
+  if (rps < 0.0f)
+    rps = 0.0f;
+  if (rps > 200.0f)
+    rps = 200.0f;
+
+  cfg.maxRPS = rps; // AxisConfig stores as double; float ok
+  axis.setLimits(rps);
+  cfgStore.save(cfg);
 }
 
 static void setPID(const CanCmdBus::CmdFrame &f)
 {
   float Kp, Ki, Kd;
-  if (CanCmdBus::readF32(f.payload, f.len, 0, Kp) &&
-      CanCmdBus::readF32(f.payload, f.len, 4, Ki) &&
-      CanCmdBus::readF32(f.payload, f.len, 8, Kd))
-  {
-    cfg.Kp = Kp;
-    cfg.Ki = Ki;
-    cfg.Kd = Kd;
-    axis.setPID(Kp, Ki, Kd);
-    save(cfg);
-  }
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, Kp))
+    return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 4, Ki))
+    return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 8, Kd))
+    return;
+
+  cfg.Kp = Kp;
+  cfg.Ki = Ki;
+  cfg.Kd = Kd; // AxisConfig doubles; float ok
+  axis.setPID(Kp, Ki, Kd);
+  cfgStore.save(cfg);
 }
 
 static void setID(const CanCmdBus::CmdFrame &f)
 {
   uint16_t id;
-  if (CanCmdBus::readU16(f.payload, f.len, 0, id))
-  {
-    cfg.canArbId = id;
-    CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
-    save(cfg);
-  }
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, id))
+    return;
+
+  id &= 0x7FF; // standard 11-bit
+  cfg.canArbId = id;
+  CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
+  cfgStore.save(cfg);
 }
 
 static void setMicrosteps(const CanCmdBus::CmdFrame &f)
 {
   uint16_t ms;
-  if (CanCmdBus::readU16(f.payload, f.len, 0, ms))
-  {
-    cfg.microsteps = ms;
-    axis.setMicrosteps(ms);
-    save(cfg);
-  }
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, ms))
+    return;
+
+  // typical legal values: 1,2,4,8,16,32,64,128,256
+  if (ms == 0)
+    ms = 1;
+  cfg.microsteps = ms;
+  axis.setMicrosteps(ms);
+  cfgStore.save(cfg);
 }
 
 static void setStealthChop(const CanCmdBus::CmdFrame &f)
 {
-  uint8_t sc;
-  if (CanCmdBus::readU8(f.payload, f.len, 0, sc))
-  {
-    cfg.stealthChop = (sc != 0);
-    AxisController::TmcConfig tmcCfg;
-    tmcCfg.mA = cfg.driver_mA;
-    tmcCfg.toff = 5;
-    tmcCfg.blank = 24;
-    tmcCfg.spreadAlways = !cfg.stealthChop;
-    tmcCfg.stealth = cfg.stealthChop;
-    tmcCfg.spreadSwitchRPS = 6.0;
-    axis.configureDriver(tmcCfg);
-    save(cfg);
-  }
+  bool sc;
+  if (!readBool01(f.payload, f.len, 0, sc))
+    return;
+
+  cfg.stealthChop = sc;
+
+  AxisController::TmcConfig tmcCfg;
+  tmcCfg.mA = cfg.driver_mA;
+  tmcCfg.toff = 5;
+  tmcCfg.blank = 24;
+  tmcCfg.spreadAlways = !cfg.stealthChop;
+  tmcCfg.stealth = cfg.stealthChop;
+  tmcCfg.spreadSwitchRPS = 6.0;
+  axis.configureDriver(tmcCfg);
+
+  cfgStore.save(cfg);
 }
 
 static void setExtMode(const CanCmdBus::CmdFrame &f)
 {
-  uint8_t em;
-  if (CanCmdBus::readU8(f.payload, f.len, 0, em))
-  {
-    cfg.externalMode = (em != 0);
-    axis.setExternalMode(cfg.externalMode);
-    save(cfg);
-  }
+  bool em;
+  if (!readBool01(f.payload, f.len, 0, em))
+    return;
+
+  cfg.externalMode = em;
+  axis.setExternalMode(cfg.externalMode);
+  cfgStore.save(cfg);
 }
 
 static void setUnits(const CanCmdBus::CmdFrame &f)
 {
-  uint16_t u;
-  if (CanCmdBus::readU16(f.payload, f.len, 0, u))
-  {
-    cfg.units = u;
-    save(cfg);
-  }
+  uint8_t u;
+  if (!CanCmdBus::readU8(f.payload, f.len, 0, u))
+    return;
+
+  // 0=radians, 1=degrees
+  u = (u != 0) ? 1 : 0;
+  cfg.units = u;
+  cfgStore.save(cfg);
 }
 
 static void setEncInvert(const CanCmdBus::CmdFrame &f)
 {
-  uint8_t ei;
-  if (CanCmdBus::readU8(f.payload, f.len, 0, ei))
-  {
-    cfg.encInvert = (ei != 0);
-    encoder.setInvert(cfg.encInvert);
-    save(cfg);
-  }
+  bool ei;
+  if (!readBool01(f.payload, f.len, 0, ei))
+    return;
+
+  cfg.encInvert = ei;
+  encoder.setInvert(cfg.encInvert);
+  cfgStore.save(cfg);
 }
 
 // Function to send data as a CAN message
@@ -199,18 +224,18 @@ static void sendData()
   // Define a struct to hold the data
   struct DataPacket
   {
+    AxisConfigWire config; // Include everything from cfg
     double currentSpeed;
     double currentAngle;
     double targetAngle;
-    AxisConfig config; // Include everything from cfg
   };
 
   // Populate the struct with current values
   DataPacket packet;
   packet.currentSpeed = encoder.velocity(cfg.units ? EncoderAS5600::Degrees : EncoderAS5600::Radians);
-  packet.currentAngle = encoder.angle(cfg.units ? EncoderAS5600::Degrees : EncoderAS5600::Radians);    // Assuming degrees
-  packet.targetAngle = axis.targetAngleRad() * RAD_TO_DEG;        // Convert radians to degrees
-  packet.config = cfg;
+  packet.currentAngle = encoder.angle(cfg.units ? EncoderAS5600::Degrees : EncoderAS5600::Radians); // Assuming degrees
+  packet.targetAngle = axis.targetAngleRad() * RAD_TO_DEG;                                          // Convert radians to degrees
+  packet.config = toWire(cfg);
 
   // Send the struct as a CAN message
   if (!CanCmdBus::sendStruct(0x000, 0x01, packet)) // Example ID and CMD
@@ -245,7 +270,7 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_EXT_MODE, setExtMode);
   CanCmdBus::registerHandler(CMD_SET_UNITS, setUnits);
   CanCmdBus::registerHandler(CMD_SET_ENC_INVERT, setEncInvert);
-  
+
   // Encoder on PB7 (SDA), PA15 (SCL) — update to your actual wiring
   if (!encoder.begin(PB7, PA15))
   {

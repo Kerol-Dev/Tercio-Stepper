@@ -49,7 +49,6 @@ bool Calibrate_EncoderDirection(EncoderAS5600 &enc,
 
 
   jog(stepgen, enc, -test_rps, jog_ms);
-  cfg.encZeroCounts = 0; // if you prefer raw: cfg.encZeroCounts = enc.rawCounts();
   enc.calibrateZero();
 
   dbg.println("[CAL] Done.");

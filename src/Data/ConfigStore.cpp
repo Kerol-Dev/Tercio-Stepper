@@ -27,8 +27,6 @@ void ConfigStore::defaults(AxisConfig& c) const {
 bool ConfigStore::load(AxisConfig& c) const {
   AxisConfig tmp{};
   if (!eepromRead(0, &tmp, sizeof(tmp))) return false;
-  if (tmp.magic  != kMagic)               return false;
-  if (tmp.length != sizeof(AxisConfig))   return false;
 
   const uint32_t saved = tmp.crc32;
   tmp.crc32 = 0;
@@ -40,8 +38,6 @@ bool ConfigStore::load(AxisConfig& c) const {
 }
 
 bool ConfigStore::save(AxisConfig& c) const {
-  c.length = sizeof(AxisConfig);
-  c.magic  = kMagic;
   c.crc32  = 0;
   const uint32_t calc = crc32_update(0, reinterpret_cast<const uint8_t*>(&c), sizeof(c));
   c.crc32 = calc;

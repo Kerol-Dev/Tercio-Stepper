@@ -2,42 +2,60 @@
 #include <Arduino.h>
 #include <stddef.h>
 
-// Persisted axis configuration
-struct AxisConfig
-{
-  // identity & integrity
-  uint32_t magic = 0xA1A1C0DE; // bump if layout changes
-  uint16_t version = 2;        // bump when fields change
-  uint16_t length = sizeof(AxisConfig);
+// Natural C++ config with defaults
+struct AxisConfig {
   uint32_t crc32 = 0;
-
-  // core motion
   uint16_t microsteps = 256;
-  uint16_t units = 0;
-  bool encInvert = false;
-  bool dirInvert = false;
-  bool stealthChop = true;
-  bool externalMode = false;
-
-  // encoder zero (raw AS5600 counts)
-  int32_t encZeroCounts = 0;
-
-  // driver / motion limits
+  uint8_t  units = 0;
+  bool     encInvert = false;
+  bool     dirInvert = false;
+  bool     stealthChop = true;
+  bool     externalMode = false;
+  uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 800;
-  double maxRPS = 5.0;
-
-  // PID (pos->vel)
-  double Kp = 3.0;
-  double Ki = 0.0;
-  double Kd = 0.0;
-
-  // reserved
-  uint32_t flags = 0;
-
-  uint32_t canArbId = 0x001;  // our arbitration ID on the bus
-  bool canIdExtended = false; // 11-bit (false) or 29-bit (true)
-  uint16_t nodeId16 = 0x0042; // in-frame ID16
+  float    maxRPS = 5.0f;
+  float    Kp = 3.0f;
+  float    Ki = 0.0f;
+  float    Kd = 0.0f;
+  uint16_t flags = 0;
+  uint16_t canArbId = 0x001;
 };
+
+// Packed wire version (no defaults!)
+#pragma pack(push,1)
+struct AxisConfigWire {
+  uint32_t crc32;
+  uint16_t microsteps;
+  uint8_t  units;
+  uint8_t  flags;     // pack encInvert..externalMode into bits
+  uint16_t encZeroCounts;
+  uint16_t driver_mA;
+  float    maxRPS;
+  float    Kp, Ki, Kd;
+  uint16_t flags2;
+  uint16_t canArbId;
+};
+#pragma pack(pop)
+
+// Convert native → wire
+inline AxisConfigWire toWire(const AxisConfig& cfg) {
+  AxisConfigWire w{};
+  w.crc32        = cfg.crc32;
+  w.microsteps   = cfg.microsteps;
+  w.units        = cfg.units;
+  w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
+                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0);
+  w.encZeroCounts= cfg.encZeroCounts;
+  w.driver_mA    = cfg.driver_mA;
+  w.maxRPS       = cfg.maxRPS;
+  w.Kp           = cfg.Kp;
+  w.Ki           = cfg.Ki;
+  w.Kd           = cfg.Kd;
+  w.flags2       = cfg.flags;
+  w.canArbId     = cfg.canArbId;
+  return w;
+}
+
 
 class ConfigStore
 {
