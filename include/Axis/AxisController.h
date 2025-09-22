@@ -46,6 +46,7 @@ public:
   void configureDriver(const TmcConfig& c);
 
   void setMicrosteps(uint16_t micro);
+  void setFullSteps(uint16_t fullSteps);
   uint16_t microsteps() const;
 
   void setPID(double Kp, double Ki, double Kd);
@@ -57,7 +58,6 @@ public:
   bool externalMode() const;
   void attachExternal(const ExtPins& p);
 
-  // Call at high rate with fixed dt [s]
   void update(double dt);
 
   Limits& limits();

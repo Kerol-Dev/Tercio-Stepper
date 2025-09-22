@@ -80,6 +80,15 @@ void AxisController::configureDriver(const TmcConfig &c)
   setMicrosteps(_micro);
 }
 
+void Axiscontroller::setFullSteps(uint16_t fullSteps)
+{
+  if (fullSteps == 0)
+    fullSteps = 200;
+  _fullSteps = fullSteps;
+  _ustepAngleRad = (2.0 * PI) / static_cast<double>(_fullSteps * _micro);
+  setSpreadSwitchRPS(_spreadSwitchRPS);
+}
+
 void AxisController::setMicrosteps(uint16_t micro)
 {
   if (micro == 0)

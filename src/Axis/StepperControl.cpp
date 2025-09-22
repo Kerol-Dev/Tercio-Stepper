@@ -29,6 +29,11 @@ void StepperControl::setMicrostep(uint16_t m) {
   _micro = m;
 }
 
+void StepperControl::setFullSteps(uint16_t fs) {
+  if (fs == 0) fs = 200;
+  _fullSteps = fs;
+}
+
 void StepperControl::setDir(bool cw) {
   digitalWrite(_dirPin, cw ? HIGH : LOW);
 }

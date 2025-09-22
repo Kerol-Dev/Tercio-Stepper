@@ -2,14 +2,13 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Forward decl for Print (optional debug pointer)
 class Print;
 
 namespace CanCmdBus {
 
 // ---------------------- Tuning ----------------------
 #ifndef CANCMD_MAX_HANDLERS
-#define CANCMD_MAX_HANDLERS 32   // adjust as needed
+#define CANCMD_MAX_HANDLERS 32
 #endif
 
 // ---------------------- Types -----------------------
@@ -110,4 +109,4 @@ inline bool readF32(const uint8_t* b, size_t len, size_t off, float& out) {
   memcpy(&out, &v, 4); return true;
 }
 
-} // namespace CanCmdBus
+}

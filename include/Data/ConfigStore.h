@@ -5,19 +5,19 @@
 // Natural C++ config with defaults
 struct AxisConfig {
   uint32_t crc32 = 0;
-  uint16_t microsteps = 256;
+  uint16_t microsteps = 16;
+  uint16_t stepsPerRev = 200;
   uint8_t  units = 0;
   bool     encInvert = false;
   bool     dirInvert = false;
   bool     stealthChop = true;
   bool     externalMode = false;
   uint16_t encZeroCounts = 0;
-  uint16_t driver_mA = 800;
+  uint16_t driver_mA = 1000;
   float    maxRPS = 5.0f;
   float    Kp = 3.0f;
   float    Ki = 0.0f;
   float    Kd = 0.0f;
-  uint16_t flags = 0;
   uint16_t canArbId = 0x001;
 };
 
@@ -26,6 +26,7 @@ struct AxisConfig {
 struct AxisConfigWire {
   uint32_t crc32;
   uint16_t microsteps;
+  uint16_t stepsPerRev;
   uint8_t  units;
   uint8_t  flags;     // pack encInvert..externalMode into bits
   uint16_t encZeroCounts;
@@ -42,6 +43,7 @@ inline AxisConfigWire toWire(const AxisConfig& cfg) {
   AxisConfigWire w{};
   w.crc32        = cfg.crc32;
   w.microsteps   = cfg.microsteps;
+  w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;
   w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
                    (cfg.stealthChop?4:0) | (cfg.externalMode?8:0);

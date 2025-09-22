@@ -18,6 +18,7 @@ public:
   void disable();             // EN high (inactive)
 
   void setMicrostep(uint16_t m);
+  void setFullSteps(uint16_t fs);
   void setDir(bool cw);
 
   // Speed control

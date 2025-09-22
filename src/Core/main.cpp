@@ -24,7 +24,10 @@ enum : uint8_t
   CMD_SET_STEALTHCHOP = 0x07,
   CMD_SET_EXT_MODE = 0x08,
   CMD_SET_UNITS = 0x09,
-  CMD_SET_ENC_INVERT = 0x0A
+  CMD_SET_ENC_INVERT = 0x0A,
+  CMD_SET_ENABLED = 0x0B,
+  CMD_SET_STEPS_PER_REV = 0x0C,
+  CMD_DO_CALIBRATE = 0x0D
 };
 
 // -------------------- Debug UART (PA2 TX-only) --------------------
@@ -43,9 +46,9 @@ HardwareSerial TMCSerial(PA10, PB6);
 TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
 
 // Axis controller
-AxisController axis(encoder, stepgen, driver, 200, 256);
+AxisController axis(encoder, stepgen, driver, 200, 16);
 
-// External STEP/DIR/EN (moved DIR off PA2 to avoid conflict with Debug TX)
+// External STEP/DIR/EN 
 AxisController::ExtPins extPins{
     /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true};
 
@@ -56,11 +59,10 @@ AxisConfig cfg;
 // -------------------- ADC Sensors --------------------
 SensorsADC sensors;
 
-// -------------------- 20 kHz control timer --------------------
-HardwareTimer Tim6(TIM6);
-static constexpr float CTRL_HZ = 20000.0f;
-static float DT_SEC = 1.0f / CTRL_HZ;
-static unsigned long lastms = 0; // Declare lastms as an unsigned long
+// -------------------- Control Timer --------------------
+static float DT_SEC;
+static unsigned long lastms = 0;
+
 // ---- helpers ----
 static inline bool readBool01(const uint8_t *p, uint8_t len, uint8_t off, bool &out)
 {
@@ -104,19 +106,31 @@ static void setCurrentMA(const CanCmdBus::CmdFrame &f)
   cfgStore.save(cfg);
 }
 
+static void setStepsPerRev(const CanCmdBus::CmdFrame &f)
+{
+  uint16_t rev;
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, rev))
+    return;
+
+  cfg.stepsPerRev = rev;
+  axis.setFullSteps(rev);
+  stepgen.setFullSteps(rev);
+  cfgStore.save(cfg);
+}
+
 static void setSpeedLimit(const CanCmdBus::CmdFrame &f)
 {
   float rps;
   if (!CanCmdBus::readF32(f.payload, f.len, 0, rps))
     return;
 
-  // optional clamp
+  // clamp
   if (rps < 0.0f)
     rps = 0.0f;
   if (rps > 200.0f)
     rps = 200.0f;
 
-  cfg.maxRPS = rps; // AxisConfig stores as double; float ok
+  cfg.maxRPS = rps;
   axis.setLimits(rps);
   cfgStore.save(cfg);
 }
@@ -133,7 +147,7 @@ static void setPID(const CanCmdBus::CmdFrame &f)
 
   cfg.Kp = Kp;
   cfg.Ki = Ki;
-  cfg.Kd = Kd; // AxisConfig doubles; float ok
+  cfg.Kd = Kd;
   axis.setPID(Kp, Ki, Kd);
   cfgStore.save(cfg);
 }
@@ -156,7 +170,7 @@ static void setMicrosteps(const CanCmdBus::CmdFrame &f)
   if (!CanCmdBus::readU16(f.payload, f.len, 0, ms))
     return;
 
-  // typical legal values: 1,2,4,8,16,32,64,128,256
+  // legal values: 1,2,4,8,16,32,64,128,256
   if (ms == 0)
     ms = 1;
   cfg.microsteps = ms;
@@ -181,6 +195,30 @@ static void setStealthChop(const CanCmdBus::CmdFrame &f)
   tmcCfg.spreadSwitchRPS = 6.0;
   axis.configureDriver(tmcCfg);
 
+  cfgStore.save(cfg);
+}
+
+static void setMotorEnabled(const CanCmdBus::CmdFrame &f)
+{
+  bool en;
+  if (!readBool01(f.payload, f.len, 0, en))
+    return;
+
+  if (en)
+  {
+    stepgen.enable();
+  }
+  else
+  {
+    stepgen.stop();
+    stepgen.disable();
+  }
+}
+
+static void runCalibrationRoutine(const CanCmdBus::CmdFrame &f)
+{
+  (void)f;
+  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 2000);
   cfgStore.save(cfg);
 }
 
@@ -255,7 +293,17 @@ void setup()
   // ADC sensors
   sensors.begin();
 
-  cfgStore.defaults(cfg);
+  if(!cfgStore.load(cfg))
+  {
+    Debug.println("[WARN] Config load failed, using defaults");
+    cfgStore.defaults(cfg);
+    cfgStore.save(cfg);
+  }
+  else
+  {
+    Debug.println("[INFO] Config loaded");
+  }
+
   CanCmdBus::begin(500000, 5, PA11, PA12, true);
   CanCmdBus::setDebug(&Debug);
   CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
@@ -270,7 +318,10 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_EXT_MODE, setExtMode);
   CanCmdBus::registerHandler(CMD_SET_UNITS, setUnits);
   CanCmdBus::registerHandler(CMD_SET_ENC_INVERT, setEncInvert);
-
+  CanCmdBus::registerHandler(CMD_SET_ENABLED, setMotorEnabled);
+  CanCmdBus::registerHandler(CMD_SET_STEPS_PER_REV, setStepsPerRev);
+  CanCmdBus::registerHandler(CMD_DO_CALIBRATE, runCalibrationRoutine);
+  
   // Encoder on PB7 (SDA), PA15 (SCL) — update to your actual wiring
   if (!encoder.begin(PB7, PA15))
   {
@@ -295,6 +346,8 @@ void setup()
   tmcCfg.stealth = cfg.stealthChop;
   tmcCfg.spreadSwitchRPS = 6.0;
   axis.configureDriver(tmcCfg);
+  stepgen.setFullSteps(cfg.stepsPerRev);
+  axis.setFullSteps(cfg.stepsPerRev);
 
   axis.setPID(cfg.Kp, cfg.Ki, cfg.Kd);
   axis.setLimits(cfg.maxRPS);
@@ -312,8 +365,8 @@ void loop()
   lastms = millis();
 
   axis.update(DT_SEC);
-
   sensors.update();
+  
   if (millis() % 100 == 0) // every 100 ms
   {
     sendData();
