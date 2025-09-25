@@ -1,12 +1,26 @@
 #include "StepperControl.h"
 #include <HardwareTimer.h>
+#include <algorithm>
 
-StepperControl::StepperControl(uint8_t stepPin, uint8_t dirPin, uint8_t enPin,
+// ----------------------------------------------------------------------------
+// StepperControl
+// ----------------------------------------------------------------------------
+
+namespace {
+constexpr uint32_t kIdleHz      = 1;     // PWM when "stopped"
+constexpr uint8_t  kPwmChannel  = 2;     // TIM1 CH2 -> PB14
+constexpr uint8_t  kPwmDutyPct  = 50;    // 50% step pulse duty
+constexpr double   kMinActiveSps = 0.5;  // below this, treat as stopped
+}
+
+StepperControl::StepperControl(uint8_t stepPin,
+                               uint8_t dirPin,
+                               uint8_t enPin,
                                uint16_t fullStepsPerRev)
 : _stepPin(stepPin)
 , _dirPin(dirPin)
 , _enPin(enPin)
-, _fullSteps(fullStepsPerRev) {}
+, _fullSteps(fullStepsPerRev ? fullStepsPerRev : 200) {}
 
 void StepperControl::begin() {
   pinMode(_dirPin, OUTPUT);
@@ -14,10 +28,9 @@ void StepperControl::begin() {
   disable();
 
   _tim = new HardwareTimer(TIM1);
-  // TIM1_CH2 on PB14
-  _tim->setMode(2, TIMER_OUTPUT_COMPARE_PWM1, _stepPin);
-  _tim->setOverflow(1, HERTZ_FORMAT);                // 1 Hz idle
-  _tim->setCaptureCompare(2, 50, PERCENT_COMPARE_FORMAT); // 50% duty
+  _tim->setMode(kPwmChannel, TIMER_OUTPUT_COMPARE_PWM1, _stepPin);
+  _tim->setOverflow(kIdleHz, HERTZ_FORMAT);
+  _tim->setCaptureCompare(kPwmChannel, kPwmDutyPct, PERCENT_COMPARE_FORMAT);
   _tim->resume();
 }
 
@@ -25,13 +38,11 @@ void StepperControl::enable()  { digitalWrite(_enPin, LOW);  }
 void StepperControl::disable() { digitalWrite(_enPin, HIGH); }
 
 void StepperControl::setMicrostep(uint16_t m) {
-  if (m == 0) m = 1;
-  _micro = m;
+  _micro = (m == 0) ? 1 : m;
 }
 
 void StepperControl::setFullSteps(uint16_t fs) {
-  if (fs == 0) fs = 200;
-  _fullSteps = fs;
+  _fullSteps = (fs == 0) ? 200 : fs;
 }
 
 void StepperControl::setDir(bool cw) {
@@ -41,29 +52,38 @@ void StepperControl::setDir(bool cw) {
 void StepperControl::setStepRate(double sps) {
   if (!_tim) return;
 
-  if (sps < 0.5) {
+  if (sps < kMinActiveSps) {
     _tim->pause();
-    _tim->setOverflow(1, HERTZ_FORMAT);
-    _tim->setCaptureCompare(2, 50, PERCENT_COMPARE_FORMAT);
+    _tim->setOverflow(kIdleHz, HERTZ_FORMAT);
+    _tim->setCaptureCompare(kPwmChannel, kPwmDutyPct, PERCENT_COMPARE_FORMAT);
     _tim->resume();
     return;
   }
-  _tim->setOverflow(static_cast<uint32_t>(sps), HERTZ_FORMAT);
-  _tim->setCaptureCompare(2, 50, PERCENT_COMPARE_FORMAT);
+
+  const uint32_t hz = static_cast<uint32_t>(std::max(1.0, sps));
+  _tim->setOverflow(hz, HERTZ_FORMAT);
+  _tim->setCaptureCompare(kPwmChannel, kPwmDutyPct, PERCENT_COMPARE_FORMAT);
   _tim->resume();
 }
 
-void StepperControl::stop() { setStepRate(0.0); }
+void StepperControl::stop() {
+  setStepRate(0.0);
+}
 
 void StepperControl::setSpeedRPS(double rps) {
-  const double sps = fabs(rps) * stepsPerRev();
+  const double sps = std::abs(rps) * stepsPerRev();
   setStepRate(sps);
   setDir(rps >= 0.0);
 }
 
 void StepperControl::service() {
-  // reserved for future use
+  // Reserved for future extensions (e.g., ramping).
 }
 
-uint16_t StepperControl::microstep() const { return _micro; }
-double   StepperControl::stepsPerRev() const { return static_cast<double>(_fullSteps) * _micro; }
+uint16_t StepperControl::microstep() const {
+  return _micro;
+}
+
+double StepperControl::stepsPerRev() const {
+  return static_cast<double>(_fullSteps) * static_cast<double>(_micro);
+}

@@ -12,6 +12,8 @@ struct AxisConfig {
   bool     dirInvert = false;
   bool     stealthChop = true;
   bool     externalMode = false;
+  bool     minTriggered = false;
+  bool     maxTriggered = false;
   uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 1000;
   float    maxRPS = 5.0f;
@@ -33,7 +35,6 @@ struct AxisConfigWire {
   uint16_t driver_mA;
   float    maxRPS;
   float    Kp, Ki, Kd;
-  uint16_t flags2;
   uint16_t canArbId;
 };
 #pragma pack(pop)
@@ -46,14 +47,13 @@ inline AxisConfigWire toWire(const AxisConfig& cfg) {
   w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;
   w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
-                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0);
+                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | cfg.minTriggered?16:0 | (cfg.maxTriggered?32:0);
   w.encZeroCounts= cfg.encZeroCounts;
   w.driver_mA    = cfg.driver_mA;
   w.maxRPS       = cfg.maxRPS;
   w.Kp           = cfg.Kp;
   w.Ki           = cfg.Ki;
   w.Kd           = cfg.Kd;
-  w.flags2       = cfg.flags;
   w.canArbId     = cfg.canArbId;
   return w;
 }

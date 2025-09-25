@@ -71,7 +71,7 @@ private:
   StepperControl&  _stepgen;
   TMC2209Stepper&  _tmc;
 
-  const uint16_t _fullSteps;
+  uint16_t _fullSteps;
   uint16_t _micro{16};
   double   _ustepAngleRad{(2.0 * PI) / (200.0 * 16.0)};
 

@@ -55,7 +55,7 @@ void EncoderAS5600::update(double dt_s) {
 }
 
 double EncoderAS5600::angle(Units u) const {
-  const double s = _invert ? -1.0 : 1.0;
+  double s = _invert ? -1.0 : 1.0;
   switch (u) {
     case Degrees:   return s * _cont * (360.0 / _cpr);
     case Radians:   return s * _cont * (2.0 * M_PI / _cpr);

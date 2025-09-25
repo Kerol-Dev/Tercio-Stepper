@@ -1,3 +1,6 @@
+// -----------------------------------------------------------------------------
+// Main firmware
+// -----------------------------------------------------------------------------
 #include <Arduino.h>
 #include <AS5600.h>
 #include <TMCStepper.h>
@@ -11,106 +14,196 @@
 #include <EEPROM.h>
 #include <ACANFD_STM32_Settings.h>
 #include "CanCmdBus.h"
-#include <Main.h>
+#include "StepperHoming.h"
+#include "Main.h"
 
-enum : uint8_t
-{
-  CMD_TARGET_ANGLE = 0x01,
-  CMD_SET_CURRENT_MA = 0x02,
-  CMD_SET_SPEED_LIMIT = 0x03,
-  CMD_SET_PID = 0x04,
-  CMD_SET_ID = 0x05,
-  CMD_SET_MICROSTEPS = 0x06,
-  CMD_SET_STEALTHCHOP = 0x07,
-  CMD_SET_EXT_MODE = 0x08,
-  CMD_SET_UNITS = 0x09,
-  CMD_SET_ENC_INVERT = 0x0A,
-  CMD_SET_ENABLED = 0x0B,
+// -----------------------------------------------------------------------------
+// Developer mode (compile-time)
+// Set to 0 for production builds to avoid creating a hardware UART for debug.
+// -----------------------------------------------------------------------------
+#ifndef DEVELOPER_MODE
+#define DEVELOPER_MODE 1
+#endif
+constexpr bool kDeveloperMode = (DEVELOPER_MODE != 0);
+
+// Debug sink
+#if DEVELOPER_MODE
+// Debug UART (PA2 TX-only). RX=PA3 (unused), TX=PA2
+HardwareSerial Debug(PA3, PA2);
+#else
+// Minimal no-op stream compatible with Print-like interfaces used by the firmware.
+class NullStream : public Print {
+public:
+  void begin(unsigned long) {}
+  void println(const char*) {}
+  void printf(const char*, ...) {}
+  size_t write(uint8_t) override { return 1; }
+  using Print::write;
+};
+static NullStream Debug;
+#endif
+
+// Debug macros
+#if DEVELOPER_MODE
+  #define DBG_INIT(baud)     do { Debug.begin(baud); } while (0)
+  #define DBG_PRINTLN(msg)   do { Debug.println(msg); } while (0)
+  #define DBG_PRINTF(...)    do { Debug.printf(__VA_ARGS__); } while (0)
+#else
+  #define DBG_INIT(baud)     do {} while (0)
+  #define DBG_PRINTLN(msg)   do {} while (0)
+  #define DBG_PRINTF(...)    do {} while (0)
+#endif
+
+// -----------------------------------------------------------------------------
+// Commands
+// -----------------------------------------------------------------------------
+enum : uint8_t {
+  CMD_TARGET_ANGLE      = 0x01,
+  CMD_SET_CURRENT_MA    = 0x02,
+  CMD_SET_SPEED_LIMIT   = 0x03,
+  CMD_SET_PID           = 0x04,
+  CMD_SET_ID            = 0x05,
+  CMD_SET_MICROSTEPS    = 0x06,
+  CMD_SET_STEALTHCHOP   = 0x07,
+  CMD_SET_EXT_MODE      = 0x08,
+  CMD_SET_UNITS         = 0x09,
+  CMD_SET_ENC_INVERT    = 0x0A,
+  CMD_SET_ENABLED       = 0x0B,
   CMD_SET_STEPS_PER_REV = 0x0C,
-  CMD_DO_CALIBRATE = 0x0D
+  CMD_DO_CALIBRATE      = 0x0D,
+  CMD_DO_HOMING         = 0x0E
 };
 
-// -------------------- Debug UART (PA2 TX-only) --------------------
-HardwareSerial Debug(PA3, PA2); // RX=PA3 (unused), TX=PA2
+// -----------------------------------------------------------------------------
+// Hardware pins / instances
+// -----------------------------------------------------------------------------
+static constexpr uint8_t PIN_STEP     = PB14;
+static constexpr uint8_t PIN_DIR      = PB15;
+static constexpr uint8_t PIN_EN       = PB5;    // EN active-low
+static constexpr uint8_t PIN_I2C_SDA  = PB7;
+static constexpr uint8_t PIN_I2C_SCL  = PA15;
+static constexpr uint8_t PIN_HOM_IN1  = PB12;
+static constexpr uint8_t PIN_HOM_IN2  = PB13;
 
-// -------------------- Hardware wiring --------------------
-// Encoder (uses PB7=SDA, PA15=SCL below)
-EncoderAS5600 encoder;
+EncoderAS5600   encoder;
+StepperHoming   homing;
+StepperControl  stepgen(PIN_STEP, PIN_DIR, PIN_EN, 200);
 
-// Step gen: TIM1 CH2 → PB14 (STEP), PB15 (DIR), PB5 (EN active-low)
-StepperControl stepgen(PB14, PB15, PB5, 200);
-
-// TMC2209 (UART): RX=PA10, TX=PB6
 #define R_SENSE 0.11f
-HardwareSerial TMCSerial(PA10, PB6);
-TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
+HardwareSerial  TMCSerial(PA10, PB6);          // TMC2209 UART: RX=PA10, TX=PB6
+TMC2209Stepper  driver(&TMCSerial, R_SENSE, 0b00);
 
-// Axis controller
-AxisController axis(encoder, stepgen, driver, 200, 16);
+AxisController  axis(encoder, stepgen, driver, 200, 16);
 
-// External STEP/DIR/EN 
 AxisController::ExtPins extPins{
-    /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true};
+  /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true
+};
 
-// -------------------- Config storage --------------------
+// -----------------------------------------------------------------------------
+// Config / sensors / timing
+// -----------------------------------------------------------------------------
 ConfigStore cfgStore;
-AxisConfig cfg;
+AxisConfig  cfg;
+SensorsADC  sensors;
 
-// -------------------- ADC Sensors --------------------
-SensorsADC sensors;
+static float         g_dtSec   = 0.f;
+static unsigned long g_lastMs  = 0;
 
-// -------------------- Control Timer --------------------
-static float DT_SEC;
-static unsigned long lastms = 0;
+// -----------------------------------------------------------------------------
+// Homing wire payload <B f B f B> (bools as u8; offset/speed as float32)
+// -----------------------------------------------------------------------------
+#pragma pack(push, 1)
+struct HomingWire {
+  uint8_t useIN1Trigger; // 0/1
+  float   offset;        // device units (deg/rad per cfg.units)
+  uint8_t activeLow;     // 0/1
+  float   speed;         // rps (or chosen units)
+  uint8_t direction;     // 0=negative, 1=positive
+};
+#pragma pack(pop)
+static_assert(sizeof(HomingWire) == 11, "HomingWire must be 11 bytes");
 
-// ---- helpers ----
-static inline bool readBool01(const uint8_t *p, uint8_t len, uint8_t off, bool &out)
-{
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+static inline bool readBool01(const uint8_t* p, uint8_t len, uint8_t off, bool& out) {
   uint8_t v;
-  if (!CanCmdBus::readU8(p, len, off, v))
-    return false;
+  if (!CanCmdBus::readU8(p, len, off, v)) return false;
   out = (v != 0);
   return true;
 }
 
-// ---- handlers ----
-
-static void setTarget(const CanCmdBus::CmdFrame &f)
-{
+// -----------------------------------------------------------------------------
+// Handlers
+// -----------------------------------------------------------------------------
+static void onTarget(const CanCmdBus::CmdFrame& f) {
   float angle;
-  if (!CanCmdBus::readF32(f.payload, f.len, 0, angle))
-    return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, angle)) return;
 
-  float rad = angle;
-  // units: 0=radians, 1=degrees
-  if (cfg.units == 1)
-    rad = angle * DEG_TO_RAD;
-
+  const float rad = (cfg.units == 1) ? angle * DEG_TO_RAD : angle;
   axis.setTargetAngleRad(rad);
 }
 
-static void setCurrentMA(const CanCmdBus::CmdFrame &f)
-{
+static void onCurrentMA(const CanCmdBus::CmdFrame& f) {
   uint16_t ma;
-  if (!CanCmdBus::readU16(f.payload, f.len, 0, ma))
-    return;
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, ma)) return;
 
-  // clamp to something sane for TMC2209
-  if (ma < 50)
-    ma = 50;
-  if (ma > 2000)
-    ma = 2000;
-
+  ma = (ma < 50) ? 50 : (ma > 2000 ? 2000 : ma);
   cfg.driver_mA = ma;
   driver.rms_current(ma);
   cfgStore.save(cfg);
 }
 
-static void setStepsPerRev(const CanCmdBus::CmdFrame &f)
-{
-  uint16_t rev;
-  if (!CanCmdBus::readU16(f.payload, f.len, 0, rev))
+static void onHoming(const CanCmdBus::CmdFrame& f) {
+  stepgen.enable();
+
+  if (f.len != sizeof(HomingWire)) {
+    DBG_PRINTF("[HOM] Bad payload len=%u (expected %u)\r\n",
+               unsigned(f.len), unsigned(sizeof(HomingWire)));
     return;
+  }
+
+  HomingWire hw{};
+  memcpy(&hw, f.payload, sizeof(HomingWire));
+
+  HomingConfig hcfg{
+    static_cast<uint8_t>(PIN_HOM_IN1),          // inMinPin
+    static_cast<uint8_t>(PIN_HOM_IN2),          // inMaxPin
+    (hw.activeLow != 0),                        // minActiveLow
+    (hw.activeLow != 0),                        // maxActiveLow
+    hw.speed,                                   // seekSpeed (sign enforced in setVel below)
+    30000u,                                     // timeoutMs
+    hw.offset                                   // backoffOffset
+  };
+  homing.begin(hcfg);
+
+  const bool useIN1 = (hw.useIN1Trigger != 0);
+  const bool dirPos = (hw.direction != 0);
+
+  const bool ok = homing.home(
+    // setVel
+    [&](float v) {
+      const float sp = dirPos ? fabsf(v) : -fabsf(v);
+      stepgen.setSpeedRPS(sp);
+    },
+    // stop
+    [&]() { stepgen.stop(); },
+    // encoder
+    encoder,
+    // setZero
+    [&](float /*z*/) {
+      encoder.calibrateZero();
+    },
+    // seekToMin
+    useIN1
+  );
+
+  DBG_PRINTLN(ok ? "[HOM] Done" : "[HOM] FAILED");
+}
+
+static void onStepsPerRev(const CanCmdBus::CmdFrame& f) {
+  uint16_t rev;
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, rev)) return;
 
   cfg.stepsPerRev = rev;
   axis.setFullSteps(rev);
@@ -118,257 +211,215 @@ static void setStepsPerRev(const CanCmdBus::CmdFrame &f)
   cfgStore.save(cfg);
 }
 
-static void setSpeedLimit(const CanCmdBus::CmdFrame &f)
-{
+static void onSpeedLimit(const CanCmdBus::CmdFrame& f) {
   float rps;
-  if (!CanCmdBus::readF32(f.payload, f.len, 0, rps))
-    return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, rps)) return;
 
-  // clamp
-  if (rps < 0.0f)
-    rps = 0.0f;
-  if (rps > 200.0f)
-    rps = 200.0f;
-
+  rps = (rps < 0.f) ? 0.f : (rps > 200.f ? 200.f : rps);
   cfg.maxRPS = rps;
   axis.setLimits(rps);
   cfgStore.save(cfg);
 }
 
-static void setPID(const CanCmdBus::CmdFrame &f)
-{
+static void onPID(const CanCmdBus::CmdFrame& f) {
   float Kp, Ki, Kd;
-  if (!CanCmdBus::readF32(f.payload, f.len, 0, Kp))
-    return;
-  if (!CanCmdBus::readF32(f.payload, f.len, 4, Ki))
-    return;
-  if (!CanCmdBus::readF32(f.payload, f.len, 8, Kd))
-    return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, Kp)) return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 4, Ki)) return;
+  if (!CanCmdBus::readF32(f.payload, f.len, 8, Kd)) return;
 
-  cfg.Kp = Kp;
-  cfg.Ki = Ki;
-  cfg.Kd = Kd;
+  cfg.Kp = Kp; cfg.Ki = Ki; cfg.Kd = Kd;
   axis.setPID(Kp, Ki, Kd);
   cfgStore.save(cfg);
 }
 
-static void setID(const CanCmdBus::CmdFrame &f)
-{
+static void onID(const CanCmdBus::CmdFrame& f) {
   uint16_t id;
-  if (!CanCmdBus::readU16(f.payload, f.len, 0, id))
-    return;
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, id)) return;
 
-  id &= 0x7FF; // standard 11-bit
+  id &= 0x7FF;
   cfg.canArbId = id;
   CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
   cfgStore.save(cfg);
 }
 
-static void setMicrosteps(const CanCmdBus::CmdFrame &f)
-{
+static void onMicrosteps(const CanCmdBus::CmdFrame& f) {
   uint16_t ms;
-  if (!CanCmdBus::readU16(f.payload, f.len, 0, ms))
-    return;
+  if (!CanCmdBus::readU16(f.payload, f.len, 0, ms)) return;
 
-  // legal values: 1,2,4,8,16,32,64,128,256
-  if (ms == 0)
-    ms = 1;
+  if (ms == 0) ms = 1;
   cfg.microsteps = ms;
   axis.setMicrosteps(ms);
   cfgStore.save(cfg);
 }
 
-static void setStealthChop(const CanCmdBus::CmdFrame &f)
-{
+static void onStealthChop(const CanCmdBus::CmdFrame& f) {
   bool sc;
-  if (!readBool01(f.payload, f.len, 0, sc))
-    return;
+  if (!readBool01(f.payload, f.len, 0, sc)) return;
 
   cfg.stealthChop = sc;
 
-  AxisController::TmcConfig tmcCfg;
-  tmcCfg.mA = cfg.driver_mA;
-  tmcCfg.toff = 5;
-  tmcCfg.blank = 24;
-  tmcCfg.spreadAlways = !cfg.stealthChop;
-  tmcCfg.stealth = cfg.stealthChop;
-  tmcCfg.spreadSwitchRPS = 6.0;
-  axis.configureDriver(tmcCfg);
+  AxisController::TmcConfig tmc{};
+  tmc.mA = cfg.driver_mA;
+  tmc.toff = 5;
+  tmc.blank = 24;
+  tmc.spreadAlways = !cfg.stealthChop;
+  tmc.stealth = cfg.stealthChop;
+  tmc.spreadSwitchRPS = 6.0;
+  axis.configureDriver(tmc);
 
   cfgStore.save(cfg);
 }
 
-static void setMotorEnabled(const CanCmdBus::CmdFrame &f)
-{
+static void onEnabled(const CanCmdBus::CmdFrame& f) {
   bool en;
-  if (!readBool01(f.payload, f.len, 0, en))
-    return;
+  if (!readBool01(f.payload, f.len, 0, en)) return;
 
-  if (en)
-  {
+  if (en) {
     stepgen.enable();
-  }
-  else
-  {
+  } else {
     stepgen.stop();
     stepgen.disable();
   }
 }
 
-static void runCalibrationRoutine(const CanCmdBus::CmdFrame &f)
-{
+static void onCalibrate(const CanCmdBus::CmdFrame& f) {
   (void)f;
   Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 2000);
   cfgStore.save(cfg);
 }
 
-static void setExtMode(const CanCmdBus::CmdFrame &f)
-{
+static void onExtMode(const CanCmdBus::CmdFrame& f) {
   bool em;
-  if (!readBool01(f.payload, f.len, 0, em))
-    return;
+  if (!readBool01(f.payload, f.len, 0, em)) return;
 
   cfg.externalMode = em;
   axis.setExternalMode(cfg.externalMode);
   cfgStore.save(cfg);
 }
 
-static void setUnits(const CanCmdBus::CmdFrame &f)
-{
+static void onUnits(const CanCmdBus::CmdFrame& f) {
   uint8_t u;
-  if (!CanCmdBus::readU8(f.payload, f.len, 0, u))
-    return;
+  if (!CanCmdBus::readU8(f.payload, f.len, 0, u)) return;
 
-  // 0=radians, 1=degrees
-  u = (u != 0) ? 1 : 0;
-  cfg.units = u;
+  cfg.units = (u != 0) ? 1 : 0;  // 0=radians, 1=degrees
   cfgStore.save(cfg);
 }
 
-static void setEncInvert(const CanCmdBus::CmdFrame &f)
-{
+static void onEncInvert(const CanCmdBus::CmdFrame& f) {
   bool ei;
-  if (!readBool01(f.payload, f.len, 0, ei))
-    return;
+  if (!readBool01(f.payload, f.len, 0, ei)) return;
 
   cfg.encInvert = ei;
   encoder.setInvert(cfg.encInvert);
   cfgStore.save(cfg);
 }
 
-// Function to send data as a CAN message
-static void sendData()
-{
-  // Define a struct to hold the data
-  struct DataPacket
-  {
-    AxisConfigWire config; // Include everything from cfg
+// -----------------------------------------------------------------------------
+// Telemetry (CAN broadcast)
+// -----------------------------------------------------------------------------
+static void sendData() {
+  struct DataPacket {
+    AxisConfigWire config;
     double currentSpeed;
     double currentAngle;
     double targetAngle;
   };
 
-  // Populate the struct with current values
-  DataPacket packet;
-  packet.currentSpeed = encoder.velocity(cfg.units ? EncoderAS5600::Degrees : EncoderAS5600::Radians);
-  packet.currentAngle = encoder.angle(cfg.units ? EncoderAS5600::Degrees : EncoderAS5600::Radians); // Assuming degrees
-  packet.targetAngle = axis.targetAngleRad() * RAD_TO_DEG;                                          // Convert radians to degrees
-  packet.config = toWire(cfg);
+  DataPacket pkt;
+  const bool useDeg = (cfg.units == 1);
 
-  // Send the struct as a CAN message
-  if (!CanCmdBus::sendStruct(0x000, 0x01, packet)) // Example ID and CMD
-  {
-    Debug.println("Failed to send CAN message");
+  pkt.currentSpeed = encoder.velocity(useDeg ? EncoderAS5600::Degrees
+                                             : EncoderAS5600::Radians);
+  pkt.currentAngle = encoder.angle(useDeg ? EncoderAS5600::Degrees
+                                          : EncoderAS5600::Radians);
+  pkt.targetAngle  = axis.targetAngleRad() * (useDeg ? RAD_TO_DEG : 1.0);
+  pkt.config = toWire(cfg);
+
+  if (!CanCmdBus::sendStruct(0x000, 0x01, pkt)) {
+    DBG_PRINTLN("Failed to send CAN message");
   }
 }
 
-void setup()
-{
-  // Start debug serial
-  Debug.begin(115200);
-
-  // Begin EEPROM
+// -----------------------------------------------------------------------------
+// Setup / loop
+// -----------------------------------------------------------------------------
+void setup() {
+  DBG_INIT(115200);
   EEPROM.begin();
-
-  // ADC sensors
   sensors.begin();
 
-  if(!cfgStore.load(cfg))
-  {
-    Debug.println("[WARN] Config load failed, using defaults");
+  if (!cfgStore.load(cfg)) {
+    DBG_PRINTLN("[WARN] Config load failed, using defaults");
     cfgStore.defaults(cfg);
     cfgStore.save(cfg);
-  }
-  else
-  {
-    Debug.println("[INFO] Config loaded");
+  } else {
+    DBG_PRINTLN("[INFO] Config loaded");
   }
 
+  // CAN
   CanCmdBus::begin(500000, 5, PA11, PA12, true);
+#if DEVELOPER_MODE
   CanCmdBus::setDebug(&Debug);
+#endif
   CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
 
-  CanCmdBus::registerHandler(CMD_TARGET_ANGLE, setTarget);
-  CanCmdBus::registerHandler(CMD_SET_CURRENT_MA, setCurrentMA);
-  CanCmdBus::registerHandler(CMD_SET_SPEED_LIMIT, setSpeedLimit);
-  CanCmdBus::registerHandler(CMD_SET_PID, setPID);
-  CanCmdBus::registerHandler(CMD_SET_ID, setID);
-  CanCmdBus::registerHandler(CMD_SET_MICROSTEPS, setMicrosteps);
-  CanCmdBus::registerHandler(CMD_SET_STEALTHCHOP, setStealthChop);
-  CanCmdBus::registerHandler(CMD_SET_EXT_MODE, setExtMode);
-  CanCmdBus::registerHandler(CMD_SET_UNITS, setUnits);
-  CanCmdBus::registerHandler(CMD_SET_ENC_INVERT, setEncInvert);
-  CanCmdBus::registerHandler(CMD_SET_ENABLED, setMotorEnabled);
-  CanCmdBus::registerHandler(CMD_SET_STEPS_PER_REV, setStepsPerRev);
-  CanCmdBus::registerHandler(CMD_DO_CALIBRATE, runCalibrationRoutine);
-  
-  // Encoder on PB7 (SDA), PA15 (SCL) — update to your actual wiring
-  if (!encoder.begin(PB7, PA15))
-  {
-    while (1)
-    {
-      Debug.println("[ERR] AS5600 not found");
-      delay(500);
-    }
+  // Command handlers
+  CanCmdBus::registerHandler(CMD_TARGET_ANGLE,      onTarget);
+  CanCmdBus::registerHandler(CMD_SET_CURRENT_MA,    onCurrentMA);
+  CanCmdBus::registerHandler(CMD_SET_SPEED_LIMIT,   onSpeedLimit);
+  CanCmdBus::registerHandler(CMD_SET_PID,           onPID);
+  CanCmdBus::registerHandler(CMD_SET_ID,            onID);
+  CanCmdBus::registerHandler(CMD_SET_MICROSTEPS,    onMicrosteps);
+  CanCmdBus::registerHandler(CMD_SET_STEALTHCHOP,   onStealthChop);
+  CanCmdBus::registerHandler(CMD_SET_EXT_MODE,      onExtMode);
+  CanCmdBus::registerHandler(CMD_SET_UNITS,         onUnits);
+  CanCmdBus::registerHandler(CMD_SET_ENC_INVERT,    onEncInvert);
+  CanCmdBus::registerHandler(CMD_SET_ENABLED,       onEnabled);
+  CanCmdBus::registerHandler(CMD_SET_STEPS_PER_REV, onStepsPerRev);
+  CanCmdBus::registerHandler(CMD_DO_CALIBRATE,      onCalibrate);
+  CanCmdBus::registerHandler(CMD_DO_HOMING,         onHoming);
+
+  // Encoder
+  if (!encoder.begin(PIN_I2C_SDA, PIN_I2C_SCL)) {
+    while (1) { DBG_PRINTLN("[ERR] AS5600 not found"); delay(500); }
   }
-  encoder.setVelAlpha(0.75f); // mild smoothing
+  encoder.setVelAlpha(1);               // mild smoothing
   encoder.setInvert(cfg.encInvert);
 
-  // Bring up axis + driver
+  // Axis + driver
   TMCSerial.begin(115200);
   axis.begin();
 
-  AxisController::TmcConfig tmcCfg;
-  tmcCfg.mA = cfg.driver_mA;
-  tmcCfg.toff = 5;
-  tmcCfg.blank = 24;
-  tmcCfg.spreadAlways = !cfg.stealthChop;
-  tmcCfg.stealth = cfg.stealthChop;
-  tmcCfg.spreadSwitchRPS = 6.0;
-  axis.configureDriver(tmcCfg);
+  AxisController::TmcConfig tmc{};
+  tmc.mA = cfg.driver_mA;
+  tmc.toff = 5;
+  tmc.blank = 24;
+  tmc.spreadAlways = !cfg.stealthChop;
+  tmc.stealth = cfg.stealthChop;
+  tmc.spreadSwitchRPS = 6.0;
+  axis.configureDriver(tmc);
+
   stepgen.setFullSteps(cfg.stepsPerRev);
   axis.setFullSteps(cfg.stepsPerRev);
-
   axis.setPID(cfg.Kp, cfg.Ki, cfg.Kd);
   axis.setLimits(cfg.maxRPS);
   axis.setMicrosteps(cfg.microsteps);
 
   axis.attachExternal(extPins);
   axis.setExternalMode(cfg.externalMode);
-
   axis.setTargetAngleRad(0);
 }
 
-void loop()
-{
-  DT_SEC = (millis() - lastms) * 0.001f;
-  lastms = millis();
+void loop() {
+  const unsigned long now = millis();
+  g_dtSec = (now - g_lastMs) * 0.001f;
+  g_lastMs = now;
 
-  axis.update(DT_SEC);
+  axis.update(g_dtSec);
   sensors.update();
-  
-  if (millis() % 100 == 0) // every 100 ms
-  {
+  homing.update();
+
+  if ((now % 50) == 0) {  // ~20 Hz gate
     sendData();
   }
   CanCmdBus::poll();
