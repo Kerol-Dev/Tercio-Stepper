@@ -40,7 +40,7 @@ bool Calibrate_EncoderDirection(EncoderAS5600& enc,
                                 double test_rps,
                                 uint32_t jog_ms)
 {
-  CAL_LOG(dbg, "[CAL] Encoder direction...");
+  // CAL_LOG(dbg, "[CAL] Encoder direction...");
 
   // Ensure known state
   enc.setInvert(false);
@@ -56,19 +56,19 @@ bool Calibrate_EncoderDirection(EncoderAS5600& enc,
   const double end_deg = enc.angle() * RAD_TO_DEG;
   const double delta_deg = end_deg - start_deg;
 
-  CAL_LOGF(dbg, "[CAL] CW delta = %.2f deg\r\n", delta_deg);
+  // CAL_LOGF(dbg, "[CAL] CW delta = %.2f deg\r\n", delta_deg);
 
   // Determine inversion: if CW jog reduced angle, encoder is inverted
   const bool inverted = (delta_deg < 0.0);
   cfg.encInvert = inverted;
   enc.setInvert(inverted);
 
-  CAL_LOGF(dbg, "[CAL] invert = %s\r\n", inverted ? "TRUE" : "FALSE");
+  // CAL_LOGF(dbg, "[CAL] invert = %s\r\n", inverted ? "TRUE" : "FALSE");
 
   // Return to start vicinity and zero
   jog(stepgen, enc, -test_rps, jog_ms);
   enc.calibrateZero();
 
-  CAL_LOG(dbg, "[CAL] Done.");
+  // CAL_LOG(dbg, "[CAL] Done.");
   return true;
 }

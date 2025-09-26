@@ -71,7 +71,8 @@ enum : uint8_t {
   CMD_SET_ENABLED       = 0x0B,
   CMD_SET_STEPS_PER_REV = 0x0C,
   CMD_DO_CALIBRATE      = 0x0D,
-  CMD_DO_HOMING         = 0x0E
+  CMD_DO_HOMING         = 0x0E,
+  CMD_SET_PROTECTION    = 0x0F
 };
 
 // -----------------------------------------------------------------------------
@@ -288,6 +289,14 @@ static void onCalibrate(const CanCmdBus::CmdFrame& f) {
   cfgStore.save(cfg);
 }
 
+static void enableProtection(const CanCmdBus::CmdFrame& f) {
+  bool ep;
+  if (!readBool01(f.payload, f.len, 0, ep)) return;
+
+  cfg.enableProtection = ep;
+  cfgStore.save(cfg);
+}
+
 static void onExtMode(const CanCmdBus::CmdFrame& f) {
   bool em;
   if (!readBool01(f.payload, f.len, 0, em)) return;
@@ -320,9 +329,10 @@ static void onEncInvert(const CanCmdBus::CmdFrame& f) {
 static void sendData() {
   struct DataPacket {
     AxisConfigWire config;
-    double currentSpeed;
-    double currentAngle;
-    double targetAngle;
+    float currentSpeed;
+    float currentAngle;
+    float targetAngle;
+    float temperature;
   };
 
   DataPacket pkt;
@@ -333,11 +343,17 @@ static void sendData() {
   pkt.currentAngle = encoder.angle(useDeg ? EncoderAS5600::Degrees
                                           : EncoderAS5600::Radians);
   pkt.targetAngle  = axis.targetAngleRad() * (useDeg ? RAD_TO_DEG : 1.0);
+  pkt.temperature = sensors.temperatureC();
   pkt.config = toWire(cfg);
 
   if (!CanCmdBus::sendStruct(0x000, 0x01, pkt)) {
     DBG_PRINTLN("Failed to send CAN message");
   }
+}
+
+bool overTemperatureProtection()
+{
+  return !cfg.enableProtection || sensors.temperatureC() >= 95.0f;
 }
 
 // -----------------------------------------------------------------------------
@@ -378,7 +394,8 @@ void setup() {
   CanCmdBus::registerHandler(CMD_SET_STEPS_PER_REV, onStepsPerRev);
   CanCmdBus::registerHandler(CMD_DO_CALIBRATE,      onCalibrate);
   CanCmdBus::registerHandler(CMD_DO_HOMING,         onHoming);
-
+  CanCmdBus::registerHandler(CMD_SET_PROTECTION,    enableProtection);
+  
   // Encoder
   if (!encoder.begin(PIN_I2C_SDA, PIN_I2C_SCL)) {
     while (1) { DBG_PRINTLN("[ERR] AS5600 not found"); delay(500); }
@@ -418,6 +435,11 @@ void loop() {
   axis.update(g_dtSec);
   sensors.update();
   homing.update();
+
+  if(overTemperatureProtection())
+  {
+    stepgen.stop();
+  }
 
   if ((now % 50) == 0) {  // ~20 Hz gate
     sendData();

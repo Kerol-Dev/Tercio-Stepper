@@ -50,7 +50,7 @@ def main():
                 tgt = st.targetAngle  if st.targetAngle  is not None else float("nan")
                 spd = st.currentSpeed if st.currentSpeed is not None else float("nan")
                 print(f"ID 0x{args.id:03X} | angle={ang:9.4f} | target={tgt:9.4f} | speed={spd:8.5f} rps")
-            time.sleep(0.10)  # ~10 Hz
+                print(st.temperature)
 
     except KeyboardInterrupt:
         pass

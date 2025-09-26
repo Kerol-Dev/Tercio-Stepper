@@ -38,6 +38,7 @@ class Cmd(IntEnum):
     SET_STEPS_PER_REV  = 0x0C
     DO_CALIBRATE       = 0x0D
     DO_HOMING          = 0x0E
+    SET_PROTECTION     = 0x0F
 
 # Telemetry emitted by firmware (broadcast)
 TELEMETRY_CAN_ID: int = 0x000
@@ -52,7 +53,7 @@ AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
 # DATAPACKET = AxisConfig + three float64: currentSpeed, currentAngle, targetAngle
-DATAPACKET_FMT  = "<I H H B B H H f f f f H d d d"
+DATAPACKET_FMT  = "<I H H B B H H f f f f H f f f f"
 DATAPACKET_SIZE = struct.calcsize(DATAPACKET_FMT)
 
 # Homing parameter payload: <B f B f B> (bools as u8; offset/speed as f32)
@@ -110,6 +111,7 @@ class AxisFlags:
     externalMode: bool
     minTriggered: bool
     maxTriggered: bool
+    enableProtection : bool
 
 @dataclass
 class AxisConfig:
@@ -132,6 +134,7 @@ class AxisState:
     currentSpeed: Optional[float] = None
     currentAngle: Optional[float] = None
     targetAngle: Optional[float] = None
+    temperature : Optional[float] = None
     timestamp: float = field(default_factory=time.time)
 
 
@@ -150,6 +153,7 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         externalMode=bool(flags & 0x08),
         minTriggered=bool(flags & 0x10),
         maxTriggered=bool(flags & 0x20),
+        enableProtection=bool(flags & 0x40)
     )
     return AxisConfig(
         crc32=crc32,
@@ -169,8 +173,8 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
         return None
     fields = struct.unpack(DATAPACKET_FMT, payload[:DATAPACKET_SIZE])
     cfg = _parse_axis_config_wire(struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:12]))
-    currentSpeed, currentAngle, targetAngle = fields[12], fields[13], fields[14]
-    return AxisState(cfg, currentSpeed, currentAngle, targetAngle, time.time())
+    currentSpeed, currentAngle, targetAngle, temperature = fields[12], fields[13], fields[14], fields[15]
+    return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, time.time())
 
 
 # -------------------------------------------------------------------
