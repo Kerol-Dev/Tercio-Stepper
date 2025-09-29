@@ -49,7 +49,7 @@ HDR_FMT = "<HBB"
 HDR_SIZE = struct.calcsize(HDR_FMT)
 
 # Config & telemetry wire formats (little-endian)
-AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f H"
+AXIS_CONFIG_WIRE_FMT  = "<I B H H B B H H f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
 # DATAPACKET = AxisConfig + three float64: currentSpeed, currentAngle, targetAngle
@@ -116,6 +116,7 @@ class AxisFlags:
 @dataclass
 class AxisConfig:
     crc32: int
+    version: int
     microsteps: int
     stepsPerRev: int
     units: int
@@ -143,7 +144,7 @@ class AxisState:
 # -------------------------------------------------------------------
 
 def _parse_axis_config_wire(b: bytes) -> AxisConfig:
-    (crc32, microsteps, steps_per_rev, units, flags,
+    (crc32, version, microsteps, steps_per_rev, units, flags,
      enc_zero_counts, driver_mA, maxRPS, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
 
     fl = AxisFlags(
@@ -157,6 +158,7 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
     )
     return AxisConfig(
         crc32=crc32,
+        version = version,
         microsteps=microsteps,
         stepsPerRev=steps_per_rev,
         units=units,
