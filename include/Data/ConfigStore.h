@@ -15,7 +15,7 @@ struct AxisConfig {
   bool     externalMode = false;
   bool     minTriggered = false;
   bool     maxTriggered = false;
-  bool     enableProtection = true;
+  bool     enableEndStop = false;
   uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 1000;
   float    maxRPS = 5.0f;
@@ -51,7 +51,7 @@ inline AxisConfigWire toWire(const AxisConfig& cfg) {
   w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;
   w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
-                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.minTriggered?16:0) | (cfg.maxTriggered?32:0) | (cfg.enableProtection?64:0);
+                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.minTriggered?16:0) | (cfg.maxTriggered?32:0) | (cfg.enableEndStop?64:0);
   w.encZeroCounts= cfg.encZeroCounts;
   w.driver_mA    = cfg.driver_mA;
   w.maxRPS       = cfg.maxRPS;

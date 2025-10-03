@@ -6,16 +6,16 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, Optional
+from typing import Dict, Optional, Iterable
 
 import serial
+from serial.tools import list_ports
 
 # -------------------------------------------------------------------
 # Logging (silent by default). Pass verbose=True to Bridge() to enable.
 # -------------------------------------------------------------------
 _logger = logging.getLogger("can_bridge")
 _logger.addHandler(logging.NullHandler())
-
 
 # -------------------------------------------------------------------
 # Protocol
@@ -49,17 +49,17 @@ HDR_FMT = "<HBB"
 HDR_SIZE = struct.calcsize(HDR_FMT)
 
 # Config & telemetry wire formats (little-endian)
+# NOTE: version (u8) is included right after crc32 (u32).
 AXIS_CONFIG_WIRE_FMT  = "<I B H H B B H H f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
-# DATAPACKET = AxisConfig + three float64: currentSpeed, currentAngle, targetAngle
-DATAPACKET_FMT  = "<I H H B B H H f f f f H f f f f"
+# DATAPACKET = AxisConfig + four float32: currentSpeed, currentAngle, targetAngle, temperature
+DATAPACKET_FMT  = "<I B H H B B H H f f f f H f f f f"
 DATAPACKET_SIZE = struct.calcsize(DATAPACKET_FMT)
 
-# Homing parameter payload: <B f B f B> (bools as u8; offset/speed as f32)
+# Homing parameter payload: <B f B f B>
 HOMING_WIRE_FMT  = "<B f B f B"
 HOMING_WIRE_SIZE = struct.calcsize(HOMING_WIRE_FMT)
-
 
 # -------------------------------------------------------------------
 # Packing helpers
@@ -79,7 +79,6 @@ def _make_frame(can_id: int, cmd: int, payload: bytes) -> bytes:
         raise ValueError(f"payload length must be 0..{MAX_PAYLOAD}")
     return struct.pack(HDR_FMT, can_id, cmd, len(payload)) + payload
 
-
 # -------------------------------------------------------------------
 # Models
 # -------------------------------------------------------------------
@@ -91,7 +90,7 @@ class HomingParams:
     offset: float = 0.0
     activeLow: bool = True
     speed: float = 0.5
-    direction: bool = True  # True=positive, False=negative
+    direction: bool = True
 
 def _pack_homing(p: HomingParams) -> bytes:
     return struct.pack(
@@ -138,7 +137,6 @@ class AxisState:
     temperature : Optional[float] = None
     timestamp: float = field(default_factory=time.time)
 
-
 # -------------------------------------------------------------------
 # Parsing
 # -------------------------------------------------------------------
@@ -158,7 +156,7 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
     )
     return AxisConfig(
         crc32=crc32,
-        version = version,
+        version=version,
         microsteps=microsteps,
         stepsPerRev=steps_per_rev,
         units=units,
@@ -174,10 +172,10 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
     if len(payload) < DATAPACKET_SIZE:
         return None
     fields = struct.unpack(DATAPACKET_FMT, payload[:DATAPACKET_SIZE])
-    cfg = _parse_axis_config_wire(struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:12]))
-    currentSpeed, currentAngle, targetAngle, temperature = fields[12], fields[13], fields[14], fields[15]
+    cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:13])
+    cfg = _parse_axis_config_wire(cfg_bytes)
+    currentSpeed, currentAngle, targetAngle, temperature = fields[13], fields[14], fields[15], fields[16]
     return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, time.time())
-
 
 # -------------------------------------------------------------------
 # Bridge
@@ -186,13 +184,13 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
 class Bridge:
     """
     USB bridge for the CAN/CAN-FD serial gateway.
-    - Use set_* methods to configure devices.
-    - Telemetry is cached per device and available via get_*.
+    - You may share one Bridge across many Stepper() instances (one per CAN ID).
+    - If port is None, the bridge tries to auto-discover a single suitable USB serial device.
     """
 
     def __init__(
         self,
-        port: str,
+        port: Optional[str] = None,
         baudrate: int = 115200,
         timeout_s: float = 0.05,
         verbose: bool = False,
@@ -217,10 +215,52 @@ class Bridge:
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
 
-    # ----- lifecycle -----
+    # ----- discovery helpers -----
+
+    @staticmethod
+    def find_port(
+        *,
+        vid: Optional[int] = 0x1209,
+        pid: Optional[int] = 0x0011,
+        product_substr: Optional[str] = None,
+        manufacturer_substr: Optional[str] = None,
+    ) -> str:
+        """
+        Auto-find a single USB-serial port that looks like the CAN-FD bridge.
+        You can filter by VID/PID or by product/manufacturer substring.
+
+        Raises:
+            RuntimeError if none or multiple candidates are found.
+        """
+        def matches(p) -> bool:
+            if vid is not None and p.vid != vid:
+                return False
+            if pid is not None and p.pid != pid:
+                return False
+            if product_substr and (not p.product or product_substr.lower() not in p.product.lower()):
+                return False
+            if manufacturer_substr and (not p.manufacturer or manufacturer_substr.lower() not in p.manufacturer.lower()):
+                return False
+            return True
+
+        ports = list(list_ports.comports())
+        cands = [p for p in ports if matches(p)]
+        # If no filter provided, accept all and require uniqueness.
+        if not any([vid, pid, product_substr, manufacturer_substr]):
+            cands = ports
+
+        if len(cands) == 0:
+            raise RuntimeError("No USB-serial ports found for CAN bridge.")
+        if len(cands) > 1:
+            desc = ", ".join(f"{p.device}({p.vid:04X}:{p.pid:04X} {p.product or ''})" for p in cands)
+            raise RuntimeError(f"Multiple serial ports found; specify one. Candidates: {desc}")
+        return cands[0].device
+
+    # ---------- lifecycle ----------
 
     def open(self) -> None:
-        self._ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout_s)
+        port = self.port or self.find_port()  # auto-detect if not provided
+        self._ser = serial.Serial(port, self.baudrate, timeout=self.timeout_s)
         if self.auto_reader:
             self.start_reader()
 
@@ -245,7 +285,7 @@ class Bridge:
             self._reader.join(timeout=1.5)
         self._reader = None
 
-    # ----- low-level I/O -----
+    # ---------- low-level I/O ----------
 
     def _send(self, can_id: int, cmd: int | Cmd, payload: bytes = b"") -> None:
         if self._ser is None:
@@ -296,10 +336,9 @@ class Bridge:
             except Exception as e:
                 _logger.debug("reader error: %s", e)
 
-    # ----- command helpers (SET) -----
+    # ---------- command helpers (SET) ----------
 
-    def set_target_angle(self, can_id: int, angle: float, *, degrees: bool = False) -> None:
-        # Device interprets units according to cfg.units; we just send f32.
+    def set_target_angle(self, can_id: int, angle: float) -> None:
         self._send(can_id, Cmd.TARGET_ANGLE, _pack_f32(angle))
 
     def set_current_ma(self, can_id: int, ma: int) -> None:
@@ -341,7 +380,7 @@ class Bridge:
     def do_homing(self, can_id: int, params: HomingParams) -> None:
         self._send(can_id, Cmd.DO_HOMING, _pack_homing(params))
 
-    # ----- telemetry access (GET) -----
+    # ---------- telemetry access (GET) ----------
 
     def _wait_state(self, can_id: int, timeout_s: Optional[float]) -> Optional[AxisState]:
         deadline = None if timeout_s is None else (time.time() + timeout_s)
@@ -373,3 +412,76 @@ class Bridge:
 
     def get_axis_state(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[AxisState]:
         return self._wait_state(can_id, timeout_s)
+
+# -------------------------------------------------------------------
+# Per-motor convenience proxy
+# -------------------------------------------------------------------
+
+class Stepper:
+    """
+    Convenience wrapper around Bridge for a single motor (CAN ID).
+    You can create many Stepper() objects sharing one Bridge.
+    """
+
+    def __init__(self, bridge: Bridge, can_id: int):
+        if not (0 <= can_id <= 0x7FF):
+            raise ValueError("can_id must be 11-bit (0..0x7FF)")
+        self.bridge = bridge
+        self.can_id = can_id
+
+    # ---- setters ----
+    def set_target_angle(self, angle: float) -> None:
+        self.bridge.set_target_angle(self.can_id, angle)
+
+    def set_current_ma(self, ma: int) -> None:
+        self.bridge.set_current_ma(self.can_id, ma)
+
+    def set_speed_limit_rps(self, rps: float) -> None:
+        self.bridge.set_speed_limit_rps(self.can_id, rps)
+
+    def set_pid(self, kp: float, ki: float, kd: float) -> None:
+        self.bridge.set_pid(self.can_id, kp, ki, kd)
+
+    def set_can_id(self, new_id: int) -> None:
+        self.bridge.set_can_id(self.can_id, new_id)
+        self.can_id = (new_id & 0x7FF)
+
+    def set_microsteps(self, microsteps: int) -> None:
+        self.bridge.set_microsteps(self.can_id, microsteps)
+
+    def set_stealthchop(self, enable: bool) -> None:
+        self.bridge.set_stealthchop(self.can_id, enable)
+
+    def set_external_mode(self, enable: bool) -> None:
+        self.bridge.set_external_mode(self.can_id, enable)
+
+    def set_units_degrees(self, use_degrees: bool) -> None:
+        self.bridge.set_units_degrees(self.can_id, use_degrees)
+
+    def set_encoder_invert(self, enable: bool) -> None:
+        self.bridge.set_encoder_invert(self.can_id, enable)
+
+    def enable_motor(self, enable: bool) -> None:
+        self.bridge.enable_motor(self.can_id, enable)
+
+    def set_steps_per_rev(self, steps_per_rev: int) -> None:
+        self.bridge.set_steps_per_rev(self.can_id, steps_per_rev)
+
+    def do_calibrate(self) -> None:
+        self.bridge.do_calibrate(self.can_id)
+
+    def do_homing(self, params: HomingParams) -> None:
+        self.bridge.do_homing(self.can_id, params)
+
+    # ---- getters ----
+    def get_axis_state(self, timeout_s: Optional[float] = None) -> Optional[AxisState]:
+        return self.bridge.get_axis_state(self.can_id, timeout_s)
+
+    def get_current_angle(self, timeout_s: Optional[float] = None) -> Optional[float]:
+        return self.bridge.get_current_angle(self.can_id, timeout_s)
+
+    def get_target_angle(self, timeout_s: Optional[float] = None) -> Optional[float]:
+        return self.bridge.get_target_angle(self.can_id, timeout_s)
+
+    def get_current_speed(self, timeout_s: Optional[float] = None) -> Optional[float]:
+        return self.bridge.get_current_speed(self.can_id, timeout_s)
