@@ -5,7 +5,6 @@
 // Natural C++ config with defaults
 struct AxisConfig {
   uint32_t crc32 = 0;
-  uint8_t  version[8] = "v1.0.0";
   uint16_t microsteps = 16;
   uint16_t stepsPerRev = 200;
   uint8_t  units = 0;
@@ -29,7 +28,6 @@ struct AxisConfig {
 #pragma pack(push,1)
 struct AxisConfigWire {
   uint32_t crc32;
-  uint8_t  version[8];
   uint16_t microsteps;
   uint16_t stepsPerRev;
   uint8_t  units;
@@ -46,7 +44,6 @@ struct AxisConfigWire {
 inline AxisConfigWire toWire(const AxisConfig& cfg) {
   AxisConfigWire w{};
   w.crc32        = cfg.crc32;
-  w.version      = cfg.version;
   w.microsteps   = cfg.microsteps;
   w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;

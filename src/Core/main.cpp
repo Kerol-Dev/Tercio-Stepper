@@ -352,7 +352,7 @@ static void enableEndstop(const CanCmdBus::CmdFrame &f)
   if (!readBool01(f.payload, f.len, 0, ep))
     return;
 
-  cfg.enableProtection = ep;
+  cfg.enableEndStop = ep;
   cfgStore.save(cfg);
 }
 
@@ -466,7 +466,7 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_STEPS_PER_REV, onStepsPerRev);
   CanCmdBus::registerHandler(CMD_DO_CALIBRATE, onCalibrate);
   CanCmdBus::registerHandler(CMD_DO_HOMING, onHoming);
-  CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndStop);
+  CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndstop);
 
   // Encoder
   if (!encoder.begin(PIN_I2C_SDA, PIN_I2C_SCL))

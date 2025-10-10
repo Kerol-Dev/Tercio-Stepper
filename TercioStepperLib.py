@@ -38,7 +38,7 @@ class Cmd(IntEnum):
     SET_STEPS_PER_REV  = 0x0C
     DO_CALIBRATE       = 0x0D
     DO_HOMING          = 0x0E
-    SET_PROTECTION     = 0x0F
+    SET_ENDSTOP        = 0x0F
 
 # Telemetry emitted by firmware (broadcast)
 TELEMETRY_CAN_ID: int = 0x000
@@ -50,11 +50,11 @@ HDR_SIZE = struct.calcsize(HDR_FMT)
 
 # Config & telemetry wire formats (little-endian)
 # NOTE: version (u8) is included right after crc32 (u32).
-AXIS_CONFIG_WIRE_FMT  = "<I B H H B B H H f f f f H"
+AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
 # DATAPACKET = AxisConfig + four float32: currentSpeed, currentAngle, targetAngle, temperature
-DATAPACKET_FMT  = "<I B H H B B H H f f f f H f f f f"
+DATAPACKET_FMT  = "<I H H B B H H f f f f H f f f f"
 DATAPACKET_SIZE = struct.calcsize(DATAPACKET_FMT)
 
 # Homing parameter payload: <B f B f B>
@@ -110,12 +110,11 @@ class AxisFlags:
     externalMode: bool
     minTriggered: bool
     maxTriggered: bool
-    enableProtection : bool
+    enableEndstop : bool
 
 @dataclass
 class AxisConfig:
     crc32: int
-    version: int
     microsteps: int
     stepsPerRev: int
     units: int
@@ -142,7 +141,7 @@ class AxisState:
 # -------------------------------------------------------------------
 
 def _parse_axis_config_wire(b: bytes) -> AxisConfig:
-    (crc32, version, microsteps, steps_per_rev, units, flags,
+    (crc32, microsteps, steps_per_rev, units, flags,
      enc_zero_counts, driver_mA, maxRPS, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
 
     fl = AxisFlags(
@@ -152,11 +151,10 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         externalMode=bool(flags & 0x08),
         minTriggered=bool(flags & 0x10),
         maxTriggered=bool(flags & 0x20),
-        enableProtection=bool(flags & 0x40)
+        enableEndstop=bool(flags & 0x40)
     )
     return AxisConfig(
         crc32=crc32,
-        version=version,
         microsteps=microsteps,
         stepsPerRev=steps_per_rev,
         units=units,
@@ -172,9 +170,9 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
     if len(payload) < DATAPACKET_SIZE:
         return None
     fields = struct.unpack(DATAPACKET_FMT, payload[:DATAPACKET_SIZE])
-    cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:13])
+    cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:12])
     cfg = _parse_axis_config_wire(cfg_bytes)
-    currentSpeed, currentAngle, targetAngle, temperature = fields[13], fields[14], fields[15], fields[16]
+    currentSpeed, currentAngle, targetAngle, temperature = fields[12], fields[13], fields[14], fields[15]
     return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, time.time())
 
 # -------------------------------------------------------------------
