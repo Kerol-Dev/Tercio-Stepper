@@ -15,9 +15,12 @@ struct AxisConfig {
   bool     minTriggered = false;
   bool     maxTriggered = false;
   bool     enableEndStop = false;
+  bool     externalEncoder = false;
+  bool     calibratedOnce = false;
   uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 1000;
   float    maxRPS = 5.0f;
+  float    maxRPS2 = 1.0f;
   float    Kp = 3.0f;
   float    Ki = 0.0f;
   float    Kd = 0.0f;
@@ -31,10 +34,11 @@ struct AxisConfigWire {
   uint16_t microsteps;
   uint16_t stepsPerRev;
   uint8_t  units;
-  uint8_t  flags;     // pack encInvert..externalMode into bits
+  uint8_t  flags;
   uint16_t encZeroCounts;
   uint16_t driver_mA;
   float    maxRPS;
+  float    maxRPS2;
   float    Kp, Ki, Kd;
   uint16_t canArbId;
 };
@@ -48,10 +52,11 @@ inline AxisConfigWire toWire(const AxisConfig& cfg) {
   w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;
   w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
-                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.minTriggered?16:0) | (cfg.maxTriggered?32:0) | (cfg.enableEndStop?64:0);
+                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.minTriggered?16:0) | (cfg.maxTriggered?32:0) | (cfg.enableEndStop?64:0) | (cfg.externalEncoder?128:0);
   w.encZeroCounts= cfg.encZeroCounts;
   w.driver_mA    = cfg.driver_mA;
   w.maxRPS       = cfg.maxRPS;
+  w.maxRPS2      = cfg.maxRPS2;
   w.Kp           = cfg.Kp;
   w.Ki           = cfg.Ki;
   w.Kd           = cfg.Kd;

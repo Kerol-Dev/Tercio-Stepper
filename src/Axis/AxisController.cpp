@@ -6,17 +6,22 @@
 // ============================================================================
 // SimplePID
 // ============================================================================
-void SimplePID::setTunings(double Kp, double Ki, double Kd) {
-  kp = Kp; ki = Ki; kd = Kd;
+void SimplePID::setTunings(double Kp, double Ki, double Kd)
+{
+  kp = Kp;
+  ki = Ki;
+  kd = Kd;
 }
 
-void SimplePID::setOutputLimits(double mn, double mx) {
-  outMin = mn; outMax = mx;
-  // keep integrator within new limits
+void SimplePID::setOutputLimits(double mn, double mx)
+{
+  outMin = mn;
+  outMax = mx;
   integ = std::clamp(integ, outMin, outMax);
 }
 
-double SimplePID::compute(double err, double dt) {
+double SimplePID::compute(double err, double dt)
+{
   // I
   integ += err * ki * dt;
   integ = std::clamp(integ, outMin, outMax);
@@ -33,30 +38,27 @@ double SimplePID::compute(double err, double dt) {
 // ============================================================================
 // AxisController
 // ============================================================================
-AxisController* AxisController::s_owner = nullptr;
+AxisController *AxisController::s_owner = nullptr;
 
-AxisController::AxisController(EncoderAS5600& enc,
-                               StepperControl& stepgen,
-                               TMC2209Stepper& tmc,
-                               uint16_t fullSteps,
-                               uint16_t micro)
-: _enc(enc)
-, _stepgen(stepgen)
-, _tmc(tmc)
-, _fullSteps(fullSteps ? fullSteps : 200) {
-  setMicrosteps(micro ? micro : 1);
+AxisController::AxisController(EncoderAS5600 &enc,
+                               StepperControl &stepgen,
+                               TMC2209Stepper &tmc,
+                               AxisConfig &cfg)
+    : _enc(enc), _stepgen(stepgen), _tmc(tmc),
+      _cfg(cfg)
+{
 }
 
-void AxisController::begin() {
-  // I2C pins are configured by the higher layer before begin() typically.
-  _enc.begin(PB7, PA15);
+void AxisController::begin()
+{
   _enc.calibrateZero();
 
   _stepgen.begin();
   _stepgen.enable();
 }
 
-void AxisController::configureDriver(const TmcConfig& c) {
+void AxisController::configureDriver(const TmcConfig &c)
+{
   _tmc.begin();
   _tmc.shaft(false);
   _tmc.toff(c.toff);
@@ -71,95 +73,103 @@ void AxisController::configureDriver(const TmcConfig& c) {
   _tmc.freewheel(0);
   _tmc.SGTHRS(0);
 
-  if (c.spreadAlways) {
-    _tmc.en_spreadCycle(true);
-  } else {
+  if (c.stealth)
+  {
     _tmc.en_spreadCycle(false);
-    setSpreadSwitchRPS(c.spreadSwitchRPS);
-  }
-  if (c.stealth) {
     _tmc.pwm_autograd(true);
   }
+  else
+  {
+    _tmc.en_spreadCycle(true);
+  }
 
-  setMicrosteps(_micro);  // re-apply to driver + cached math
+  setMicrosteps(_cfg.microsteps);
 }
 
-void AxisController::setFullSteps(uint16_t fullSteps) {
-  _fullSteps = fullSteps ? fullSteps : 200;
-  _ustepAngleRad = (2.0 * PI) / static_cast<double>(_fullSteps * _micro);
+void AxisController::setFullSteps(uint16_t fullSteps)
+{
+  _cfg.stepsPerRev = fullSteps ? fullSteps : 200;
+  _ustepAngleRad = (2.0 * PI) / static_cast<double>(_cfg.stepsPerRev * _cfg.microsteps);
   setSpreadSwitchRPS(_spreadSwitchRPS);
 }
 
-void AxisController::setMicrosteps(uint16_t micro) {
-  _micro = micro ? micro : 1;
-  _ustepAngleRad = (2.0 * PI) / static_cast<double>(_fullSteps * _micro);
+void AxisController::setMicrosteps(uint16_t micro)
+{
+  _cfg.microsteps = micro ? micro : 1;
+  _ustepAngleRad = (2.0 * PI) / static_cast<double>(_cfg.stepsPerRev * _cfg.microsteps);
 
-  _stepgen.setMicrostep(_micro);
-  _tmc.microsteps(_micro);  // driver accepts standard values (1..256)
+  _tmc.microsteps(_cfg.microsteps);
 
   setSpreadSwitchRPS(_spreadSwitchRPS);
 }
 
-uint16_t AxisController::microsteps() const {
-  return _micro;
+uint16_t AxisController::microsteps() const
+{
+  return _cfg.microsteps;
 }
 
-void AxisController::setPID(double Kp, double Ki, double Kd) {
+void AxisController::setPID(double Kp, double Ki, double Kd)
+{
   _pid.setTunings(Kp, Ki, Kd);
-  _pid.setOutputLimits(-_lim.maxRPS, _lim.maxRPS);
 }
 
-void AxisController::setLimits(double maxRPS) {
-  _lim.maxRPS = (maxRPS > 0.0) ? maxRPS : 0.0;
-  _pid.setOutputLimits(-_lim.maxRPS, _lim.maxRPS);
-}
-
-void AxisController::setTargetAngleRad(double r) {
+void AxisController::setTargetAngleRad(double r)
+{
   _targetRad = r;
 }
 
-double AxisController::targetAngleRad() const {
+double AxisController::targetAngleRad() const
+{
   return _targetRad;
 }
 
-void AxisController::setExternalMode(bool enabled) {
+void AxisController::setExternalMode(bool enabled)
+{
   _externalMode = enabled;
 }
 
-bool AxisController::externalMode() const {
+bool AxisController::externalMode() const
+{
   return _externalMode;
 }
 
-void AxisController::attachExternal(const ExtPins& p) {
+void AxisController::attachExternal(const ExtPins &p)
+{
   _ext = p;
 
-  if (_ext.en >= 0) {
+  if (_ext.en >= 0)
+  {
     pinMode(_ext.en, INPUT_PULLUP);
   }
-  if (_ext.step >= 0) {
+  if (_ext.step >= 0)
+  {
     pinMode(_ext.step, INPUT_PULLDOWN);
     s_owner = this;
     attachInterrupt(digitalPinToInterrupt(_ext.step), AxisController::onStepISR, RISING);
   }
 }
 
-void AxisController::update(double dt) {
-  // External STEP/DIR/EN → apply to target and enable gating
-  if (_externalMode && _ext.step >= 0) {
+void AxisController::update(double dt)
+{
+  if (_externalMode && _ext.step >= 0)
+  {
     int32_t pulses = 0;
     noInterrupts();
     pulses = _extStepPulses;
     _extStepPulses = 0;
     interrupts();
 
-    if (pulses != 0) {
+    if (pulses != 0)
+    {
       const int sgn = (_ext.dir >= 0) ? (digitalRead(_ext.dir) ? +1 : -1) : +1;
       _targetRad += static_cast<double>(pulses * sgn) * _ustepAngleRad;
     }
-    if (_ext.en >= 0) {
+    if (_ext.en >= 0)
+    {
       const bool enActive = _ext.enActiveLow ? (digitalRead(_ext.en) == LOW)
                                              : (digitalRead(_ext.en) == HIGH);
-      if (!enActive) {
+      if (!enActive)
+      {
         _stepgen.stop();
         _stepgen.disable();
         _cmdRPS = 0.0;
@@ -171,38 +181,45 @@ void AxisController::update(double dt) {
 
   _enc.update(dt);
 
-  const double pos = _enc.angle();          // radians
+  const double pos = _enc.angle(); // radians
   const double err = _targetRad - pos;
 
-  _cmdRPS = _pid.compute(err, dt);
-  _cmdRPS = std::clamp(_cmdRPS, -_lim.maxRPS, _lim.maxRPS);
+  double vel_target = _pid.compute(err, dt);
+
+  if (vel_target > _cmdRPS && fabs(vel_target - _cmdRPS) > (_cfg.maxRPS2 * dt))
+  {
+    _cmdRPS += (_cfg.maxRPS2 * dt);
+  }
+  else
+    _cmdRPS = vel_target;
+
+  _cmdRPS = std::clamp(_cmdRPS, -static_cast<double>(_cfg.maxRPS), static_cast<double>(_cfg.maxRPS));
 
   _stepgen.setSpeedRPS(_cmdRPS);
   _stepgen.service();
 }
 
-AxisController::Limits& AxisController::limits() {
-  return _lim;
-}
-
-void AxisController::setSpreadSwitchRPS(double rps) {
+void AxisController::setSpreadSwitchRPS(double rps)
+{
   _spreadSwitchRPS = (rps > 0.0) ? rps : 0.1;
 
   // TMC2209 TPWMTHRS calculation
-  static constexpr uint32_t fclk = 12000000UL;  // internal clock
-  const double usteps_per_rev = static_cast<double>(_fullSteps) * static_cast<double>(_micro);
-  const double f_step = _spreadSwitchRPS * usteps_per_rev;  // microsteps per second
+  static constexpr uint32_t fclk = 12000000UL; // internal clock
+  const double usteps_per_rev = static_cast<double>(_cfg.stepsPerRev) * static_cast<double>(_cfg.microsteps);
+  const double f_step = _spreadSwitchRPS * usteps_per_rev; // microsteps per second
   uint32_t tpwm = (f_step > 0.0)
-                  ? static_cast<uint32_t>(std::lround(static_cast<double>(fclk) / f_step))
-                  : 0xFFFFF;
+                      ? static_cast<uint32_t>(std::lround(static_cast<double>(fclk) / f_step))
+                      : 0xFFFFF;
 
   tpwm = std::clamp<uint32_t>(tpwm, 1, 0xFFFFF);
   _tmc.TPWMTHRS(tpwm);
 }
 
 // ISR
-void AxisController::onStepISR() {
-  if (s_owner) {
+void AxisController::onStepISR()
+{
+  if (s_owner)
+  {
     s_owner->_extStepPulses++;
   }
 }

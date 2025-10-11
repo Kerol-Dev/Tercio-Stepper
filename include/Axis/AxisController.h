@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <TMCStepper.h>
 #include "EncoderAS5600.h"
+#include "ConfigStore.h"
 #include "StepperControl.h"
 
 // Small PID used by AxisController
@@ -16,12 +17,9 @@ struct SimplePID {
   double compute(double err, double dt);
 };
 
-// Axis position controller (pos -> vel PID) with optional external STEP/DIR/EN input
+// Axis position controller (pos -> vel PID)
 class AxisController {
 public:
-  struct Limits {
-    double maxRPS{15.0};
-  };
   struct ExtPins {
     int step{-1}, dir{-1}, en{-1};
     bool enActiveLow{true};
@@ -30,16 +28,14 @@ public:
     uint16_t mA{1200};
     uint8_t  toff{4};
     uint8_t  blank{24};
-    bool     spreadAlways{false};
     bool     stealth{true};
-    double   spreadSwitchRPS{4.0};
+    double   spreadSwitchRPS{5.0};
   };
 
   AxisController(EncoderAS5600& enc,
                  StepperControl& stepgen,
                  TMC2209Stepper& tmc,
-                 uint16_t fullSteps = 200,
-                 uint16_t micro = 16);
+                 AxisConfig& cfg);
 
   void begin();
 
@@ -60,8 +56,6 @@ public:
 
   void update(double dt);
 
-  Limits& limits();
-
   void setSpreadSwitchRPS(double rps);
 
 private:
@@ -70,12 +64,10 @@ private:
   EncoderAS5600&   _enc;
   StepperControl&  _stepgen;
   TMC2209Stepper&  _tmc;
+  AxisConfig&      _cfg;
 
-  uint16_t _fullSteps;
-  uint16_t _micro{16};
   double   _ustepAngleRad{(2.0 * PI) / (200.0 * 16.0)};
 
-  Limits     _lim{};
   SimplePID  _pid{};
   ExtPins    _ext{};
   bool       _externalMode{false};

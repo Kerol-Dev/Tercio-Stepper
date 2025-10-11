@@ -33,6 +33,8 @@ class Cmd(IntEnum):
     SET_STEALTHCHOP    = 0x07
     SET_EXT_MODE       = 0x08
     SET_UNITS          = 0x09
+    SET_EXT_ENCODER    = 0x10
+    SET_ACCEL_LIMIT    = 0x11
     SET_ENC_INVERT     = 0x0A
     SET_ENABLED        = 0x0B
     SET_STEPS_PER_REV  = 0x0C
@@ -50,11 +52,11 @@ HDR_SIZE = struct.calcsize(HDR_FMT)
 
 # Config & telemetry wire formats (little-endian)
 # NOTE: version (u8) is included right after crc32 (u32).
-AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f H"
+AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
 # DATAPACKET = AxisConfig + four float32: currentSpeed, currentAngle, targetAngle, temperature
-DATAPACKET_FMT  = "<I H H B B H H f f f f H f f f f"
+DATAPACKET_FMT  = "<I H H B B H H f f f f f H f f f f"
 DATAPACKET_SIZE = struct.calcsize(DATAPACKET_FMT)
 
 # Homing parameter payload: <B f B f B>
@@ -111,6 +113,7 @@ class AxisFlags:
     minTriggered: bool
     maxTriggered: bool
     enableEndstop : bool
+    externalEncoder : bool
 
 @dataclass
 class AxisConfig:
@@ -122,6 +125,7 @@ class AxisConfig:
     encZeroCounts: int
     driver_mA: int
     maxRPS: float
+    maxRPS2: float
     Kp: float
     Ki: float
     Kd: float
@@ -142,7 +146,7 @@ class AxisState:
 
 def _parse_axis_config_wire(b: bytes) -> AxisConfig:
     (crc32, microsteps, steps_per_rev, units, flags,
-     enc_zero_counts, driver_mA, maxRPS, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
+     enc_zero_counts, driver_mA, maxRPS, maxRPS2, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
 
     fl = AxisFlags(
         encInvert=bool(flags & 0x01),
@@ -151,7 +155,8 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         externalMode=bool(flags & 0x08),
         minTriggered=bool(flags & 0x10),
         maxTriggered=bool(flags & 0x20),
-        enableEndstop=bool(flags & 0x40)
+        enableEndstop=bool(flags & 0x40),
+        externalEncoder=bool(flags & 0x80)
     )
     return AxisConfig(
         crc32=crc32,
@@ -162,6 +167,7 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         encZeroCounts=enc_zero_counts,
         driver_mA=driver_mA,
         maxRPS=maxRPS,
+        maxRPS2=maxRPS2,
         Kp=Kp, Ki=Ki, Kd=Kd,
         canArbId=canArbId,
     )
@@ -170,9 +176,9 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
     if len(payload) < DATAPACKET_SIZE:
         return None
     fields = struct.unpack(DATAPACKET_FMT, payload[:DATAPACKET_SIZE])
-    cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:12])
+    cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:13])
     cfg = _parse_axis_config_wire(cfg_bytes)
-    currentSpeed, currentAngle, targetAngle, temperature = fields[12], fields[13], fields[14], fields[15]
+    currentSpeed, currentAngle, targetAngle, temperature = fields[13], fields[14], fields[15], fields[16]
     return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, time.time())
 
 # -------------------------------------------------------------------
@@ -344,6 +350,9 @@ class Bridge:
 
     def set_speed_limit_rps(self, can_id: int, rps: float) -> None:
         self._send(can_id, Cmd.SET_SPEED_LIMIT, _pack_f32(rps))
+    
+    def set_accel_limit_rps2(self, can_id: int, rps2: float) -> None:
+        self._send(can_id, Cmd.SET_ACCEL_LIMIT, _pack_f32(rps2))
 
     def set_pid(self, can_id: int, kp: float, ki: float, kd: float) -> None:
         self._send(can_id, Cmd.SET_PID, _pack_f32(kp) + _pack_f32(ki) + _pack_f32(kd))
@@ -359,6 +368,9 @@ class Bridge:
 
     def set_external_mode(self, can_id: int, enable: bool) -> None:
         self._send(can_id, Cmd.SET_EXT_MODE, _pack_bool01(enable))
+
+    def set_external_encoder(self, can_id: int, enable: bool) -> None:
+        self._send(can_id, Cmd.SET_EXT_ENCODER, _pack_bool01(enable))
 
     def set_units_degrees(self, can_id: int, use_degrees: bool) -> None:
         self._send(can_id, Cmd.SET_UNITS, _pack_u8(1 if use_degrees else 0))
@@ -437,6 +449,9 @@ class Stepper:
     def set_speed_limit_rps(self, rps: float) -> None:
         self.bridge.set_speed_limit_rps(self.can_id, rps)
 
+    def set_accel_limit_rps2(self, rps2: float) -> None:
+        self.bridge.set_accel_limit_rps2(self.can_id, rps2)
+
     def set_pid(self, kp: float, ki: float, kd: float) -> None:
         self.bridge.set_pid(self.can_id, kp, ki, kd)
 
@@ -452,6 +467,9 @@ class Stepper:
 
     def set_external_mode(self, enable: bool) -> None:
         self.bridge.set_external_mode(self.can_id, enable)
+
+    def set_external_encoder(self, enable: bool) -> None:
+        self.bridge.set_external_encoder(self.can_id, enable)
 
     def set_units_degrees(self, use_degrees: bool) -> None:
         self.bridge.set_units_degrees(self.can_id, use_degrees)

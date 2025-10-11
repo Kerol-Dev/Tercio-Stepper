@@ -109,25 +109,25 @@ static constexpr uint8_t PIN_I2C_SCL = PA15;
 static constexpr uint8_t PIN_HOM_IN1 = PB12;
 static constexpr uint8_t PIN_HOM_IN2 = PB13;
 
-EncoderAS5600 encoder;
-StepperHoming homing;
-StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, 200);
-
-#define R_SENSE 0.11f
-HardwareSerial TMCSerial(PA10, PB6); // TMC2209 UART: RX=PA10, TX=PB6
-TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
-
-AxisController axis(encoder, stepgen, driver, 200, 16);
-
-AxisController::ExtPins extPins{
-    /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true};
-
 // -----------------------------------------------------------------------------
 // Config / sensors / timing
 // -----------------------------------------------------------------------------
 ConfigStore cfgStore;
 AxisConfig cfg;
 SensorsADC sensors;
+
+EncoderAS5600 encoder;
+StepperHoming homing;
+StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, 200);
+
+#define R_SENSE 0.11f
+HardwareSerial TMCSerial(PA10, PB6);
+TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
+
+AxisController axis(encoder, stepgen, driver, cfg);
+
+AxisController::ExtPins extPins{
+    /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true};
 
 static float g_dtSec = 0.f;
 static unsigned long g_lastMs = 0;
@@ -139,7 +139,7 @@ static float limitAngleCovered = 0.0f;
 #pragma pack(push, 1)
 struct HomingWire
 {
-  uint8_t useIN1Trigger; // 0/1
+  uint8_t useMINTrigger; // 0/1
   float offset;          // device units (deg/rad per cfg.units)
   uint8_t activeLow;     // 0/1
   float speed;           // rps (or chosen units)
@@ -210,7 +210,7 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
   };
   homing.begin(hcfg);
 
-  const bool useIN1 = (hw.useIN1Trigger != 0);
+  const bool useMIN = (hw.useMINTrigger != 0);
   const bool dirPos = (hw.direction != 0);
 
   const bool ok = homing.home(
@@ -231,9 +231,7 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
         encoder.calibrateZero();
       },
       // seekToMin
-      useIN1);
-
-  DBG_PRINTLN(ok ? "[HOM] Done" : "[HOM] FAILED");
+      useMIN);
 }
 
 static void onStepsPerRev(const CanCmdBus::CmdFrame &f)
@@ -254,9 +252,7 @@ static void onSpeedLimit(const CanCmdBus::CmdFrame &f)
   if (!CanCmdBus::readF32(f.payload, f.len, 0, rps))
     return;
 
-  rps = (rps < 0.f) ? 0.f : (rps > 200.f ? 200.f : rps);
   cfg.maxRPS = rps;
-  axis.setLimits(rps);
   cfgStore.save(cfg);
 }
 
@@ -314,9 +310,8 @@ static void onStealthChop(const CanCmdBus::CmdFrame &f)
   tmc.mA = cfg.driver_mA;
   tmc.toff = 5;
   tmc.blank = 24;
-  tmc.spreadAlways = !cfg.stealthChop;
   tmc.stealth = cfg.stealthChop;
-  tmc.spreadSwitchRPS = 6.0;
+  tmc.spreadSwitchRPS = 5.0;
   axis.configureDriver(tmc);
 
   cfgStore.save(cfg);
@@ -342,7 +337,7 @@ static void onEnabled(const CanCmdBus::CmdFrame &f)
 static void onCalibrate(const CanCmdBus::CmdFrame &f)
 {
   (void)f;
-  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 2000);
+  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 1000);
   cfgStore.save(cfg);
 }
 
@@ -435,20 +430,11 @@ void setup()
 
   if (!cfgStore.load(cfg))
   {
-    DBG_PRINTLN("[WARN] Config load failed, using defaults");
-    cfgStore.defaults(cfg);
     cfgStore.save(cfg);
-  }
-  else
-  {
-    DBG_PRINTLN("[INFO] Config loaded");
   }
 
   // CAN
   CanCmdBus::begin(500000, 5, PA11, PA12, true);
-#if DEVELOPER_MODE
-  CanCmdBus::setDebug(&Debug);
-#endif
   CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
 
   // Command handlers
@@ -488,15 +474,13 @@ void setup()
   tmc.mA = cfg.driver_mA;
   tmc.toff = 5;
   tmc.blank = 24;
-  tmc.spreadAlways = !cfg.stealthChop;
   tmc.stealth = cfg.stealthChop;
-  tmc.spreadSwitchRPS = 6.0;
+  tmc.spreadSwitchRPS = 5.0;
   axis.configureDriver(tmc);
 
   stepgen.setFullSteps(cfg.stepsPerRev);
   axis.setFullSteps(cfg.stepsPerRev);
   axis.setPID(cfg.Kp, cfg.Ki, cfg.Kd);
-  axis.setLimits(cfg.maxRPS);
   axis.setMicrosteps(cfg.microsteps);
 
   axis.attachExternal(extPins);
@@ -547,7 +531,7 @@ void loop()
     }
   }
 
-  if (overTemperatureProtection())
+  if (overTemperatureProtection() || !cfg.calibratedOnce)
   {
     stepgen.stop();
   }
