@@ -345,6 +345,10 @@ class Bridge:
     def get_current_speed(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
         st = self._wait_state(can_id, timeout_s)
         return None if st is None else st.currentSpeed
+    
+    def get_current_temp(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
+        st = self._wait_state(can_id, timeout_s)
+        return None if st is None else st.temperature
 
     def get_axis_state(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[AxisState]:
         return self._wait_state(can_id, timeout_s)
@@ -419,3 +423,6 @@ class Stepper:
 
     def get_current_speed(self, timeout_s: Optional[float] = None) -> Optional[float]:
         return self.bridge.get_current_speed(self.can_id, timeout_s)
+    
+    def get_current_temp(self, timeout_s: Optional[float] = None) -> Optional[float]:
+        return self.bridge.get_current_temp(self.can_id, timeout_s)
