@@ -306,6 +306,18 @@ static void enableEndstop(const CanCmdBus::CmdFrame &f)
   cfgStore.save(cfg);
 }
 
+static void enableExternalEncoder(const CanCmdBus::CmdFrame &f)
+{
+  bool ex;
+  if (!readBool01(f.payload, f.len, 0, ex))
+    return;
+
+  cfg.externalEncoder = ex;
+  encoder.begin(ex ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
+                ex ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
+  cfgStore.save(cfg);
+}
+
 static void onExtMode(const CanCmdBus::CmdFrame &f)
 {
   bool em;
@@ -314,8 +326,6 @@ static void onExtMode(const CanCmdBus::CmdFrame &f)
 
   cfg.externalMode = em;
   axis.setExternalMode(cfg.externalMode);
-  encoder.begin(em ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
-                em ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
   cfgStore.save(cfg);
 }
 
@@ -384,11 +394,13 @@ void setup()
   DBG_INIT(115200);
   EEPROM.begin();
   sensors.begin();
+  delay(100);
 
   if (!cfgStore.load(cfg))
   {
     cfgStore.save(cfg);
   }
+  delay(100);
 
   // CAN
   CanCmdBus::begin(500000, 5, PA11, PA12, true);
@@ -411,10 +423,22 @@ void setup()
   CanCmdBus::registerHandler(CMD_DO_CALIBRATE, onCalibrate);
   CanCmdBus::registerHandler(CMD_DO_HOMING, onHoming);
   CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndstop);
+  CanCmdBus::registerHandler(CMD_SET_EXT_ENCODER, enableExternalEncoder);
+
+  HomingConfig hcfg{
+      static_cast<uint8_t>(PIN_HOM_IN1),
+      static_cast<uint8_t>(PIN_HOM_IN2),
+      true,
+      true,
+      0,
+      30000u,
+      0};
+
+  homing.begin(hcfg);
 
   // Encoder
-  encoder.begin(cfg.externalMode ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
-                cfg.externalMode ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
+  encoder.begin(cfg.externalEncoder ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
+                cfg.externalEncoder ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
   encoder.setVelAlpha(1);
   encoder.setInvert(cfg.encInvert);
 
@@ -437,6 +461,7 @@ void setup()
   axis.attachExternal(extPins);
   axis.setExternalMode(cfg.externalMode);
   axis.setTargetAngleRad(0);
+  delay(100);
 }
 
 void loop()

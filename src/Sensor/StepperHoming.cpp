@@ -38,7 +38,7 @@ bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, SetFn 
   stop();
   if (timeout()) return false;
 
-  delay(2000);
+  delay(1000);
   
   // Back off
   enc.update(0.01); // update once to avoid large jump
