@@ -18,65 +18,6 @@
 #include "Main.h"
 
 // -----------------------------------------------------------------------------
-// Developer mode (compile-time)
-// Set to 0 for production builds to avoid creating a hardware UART for debug.
-// -----------------------------------------------------------------------------
-#ifndef DEVELOPER_MODE
-#define DEVELOPER_MODE 1
-#endif
-constexpr bool kDeveloperMode = (DEVELOPER_MODE != 0);
-
-// Debug sink
-#if DEVELOPER_MODE
-// Debug UART (PA2 TX-only). RX=PA3 (unused), TX=PA2
-HardwareSerial Debug(PA3, PA2);
-#else
-// Minimal no-op stream compatible with Print-like interfaces used by the firmware.
-class NullStream : public Print
-{
-public:
-  void begin(unsigned long) {}
-  void println(const char *) {}
-  void printf(const char *, ...) {}
-  size_t write(uint8_t) override { return 1; }
-  using Print::write;
-};
-static NullStream Debug;
-#endif
-
-// Debug macros
-#if DEVELOPER_MODE
-#define DBG_INIT(baud) \
-  do                   \
-  {                    \
-    Debug.begin(baud); \
-  } while (0)
-#define DBG_PRINTLN(msg) \
-  do                     \
-  {                      \
-    Debug.println(msg);  \
-  } while (0)
-#define DBG_PRINTF(...)        \
-  do                           \
-  {                            \
-    Debug.printf(__VA_ARGS__); \
-  } while (0)
-#else
-#define DBG_INIT(baud) \
-  do                   \
-  {                    \
-  } while (0)
-#define DBG_PRINTLN(msg) \
-  do                     \
-  {                      \
-  } while (0)
-#define DBG_PRINTF(...) \
-  do                    \
-  {                     \
-  } while (0)
-#endif
-
-// -----------------------------------------------------------------------------
 // Commands
 // -----------------------------------------------------------------------------
 enum : uint8_t
@@ -90,6 +31,8 @@ enum : uint8_t
   CMD_SET_STEALTHCHOP = 0x07,
   CMD_SET_EXT_MODE = 0x08,
   CMD_SET_UNITS = 0x09,
+  CMD_SET_EXT_ENCODER = 0x10,
+  CMD_SET_ACCEL_LIMIT = 0x11,
   CMD_SET_ENC_INVERT = 0x0A,
   CMD_SET_ENABLED = 0x0B,
   CMD_SET_STEPS_PER_REV = 0x0C,
@@ -103,24 +46,13 @@ enum : uint8_t
 // -----------------------------------------------------------------------------
 static constexpr uint8_t PIN_STEP = PB14;
 static constexpr uint8_t PIN_DIR = PB15;
-static constexpr uint8_t PIN_EN = PB5; // EN active-low
+static constexpr uint8_t PIN_EN = PB5;
 static constexpr uint8_t PIN_I2C_SDA = PB7;
 static constexpr uint8_t PIN_I2C_SCL = PA15;
+static constexpr uint8_t PIN_EXT_I2C_SDA = PA8;
+static constexpr uint8_t PIN_EXT_I2C_SCL = PA9;
 static constexpr uint8_t PIN_HOM_IN1 = PB12;
 static constexpr uint8_t PIN_HOM_IN2 = PB13;
-
-EncoderAS5600 encoder;
-StepperHoming homing;
-StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, 200);
-
-#define R_SENSE 0.11f
-HardwareSerial TMCSerial(PA10, PB6); // TMC2209 UART: RX=PA10, TX=PB6
-TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
-
-AxisController axis(encoder, stepgen, driver, 200, 16);
-
-AxisController::ExtPins extPins{
-    /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true};
 
 // -----------------------------------------------------------------------------
 // Config / sensors / timing
@@ -128,6 +60,19 @@ AxisController::ExtPins extPins{
 ConfigStore cfgStore;
 AxisConfig cfg;
 SensorsADC sensors;
+
+EncoderAS5600 encoder;
+StepperHoming homing;
+StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, cfg);
+
+#define R_SENSE 0.11f
+HardwareSerial TMCSerial(PA10, PB6);
+TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
+
+AxisController axis(encoder, stepgen, driver, cfg);
+
+AxisController::ExtPins extPins{
+    /*step*/ PA1, /*dir*/ PB3, /*en*/ PA0, /*enActiveLow*/ true};
 
 static float g_dtSec = 0.f;
 static unsigned long g_lastMs = 0;
@@ -139,10 +84,10 @@ static float limitAngleCovered = 0.0f;
 #pragma pack(push, 1)
 struct HomingWire
 {
-  uint8_t useIN1Trigger; // 0/1
+  uint8_t useMINTrigger; // 0/1
   float offset;          // device units (deg/rad per cfg.units)
   uint8_t activeLow;     // 0/1
-  float speed;           // rps (or chosen units)
+  float speed;           // rps
   uint8_t direction;     // 0=negative, 1=positive
 };
 #pragma pack(pop)
@@ -210,15 +155,16 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
   };
   homing.begin(hcfg);
 
-  const bool useIN1 = (hw.useIN1Trigger != 0);
+  const bool useMIN = (hw.useMINTrigger != 0);
   const bool dirPos = (hw.direction != 0);
 
   const bool ok = homing.home(
       // setVel
       [&](float v)
       {
-        const float sp = dirPos ? fabsf(v) : -fabsf(v);
-        stepgen.setSpeedRPS(sp);
+        if (!dirPos)
+          v = -v;
+        stepgen.setSpeedRPS(v);
       },
       // stop
       [&]()
@@ -231,9 +177,7 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
         encoder.calibrateZero();
       },
       // seekToMin
-      useIN1);
-
-  DBG_PRINTLN(ok ? "[HOM] Done" : "[HOM] FAILED");
+      useMIN);
 }
 
 static void onStepsPerRev(const CanCmdBus::CmdFrame &f)
@@ -244,7 +188,6 @@ static void onStepsPerRev(const CanCmdBus::CmdFrame &f)
 
   cfg.stepsPerRev = rev;
   axis.setFullSteps(rev);
-  stepgen.setFullSteps(rev);
   cfgStore.save(cfg);
 }
 
@@ -254,9 +197,17 @@ static void onSpeedLimit(const CanCmdBus::CmdFrame &f)
   if (!CanCmdBus::readF32(f.payload, f.len, 0, rps))
     return;
 
-  rps = (rps < 0.f) ? 0.f : (rps > 200.f ? 200.f : rps);
   cfg.maxRPS = rps;
-  axis.setLimits(rps);
+  cfgStore.save(cfg);
+}
+
+static void onAccelLimit(const CanCmdBus::CmdFrame &f)
+{
+  float rps2;
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, rps2))
+    return;
+
+  cfg.maxRPS2 = rps2;
   cfgStore.save(cfg);
 }
 
@@ -314,9 +265,8 @@ static void onStealthChop(const CanCmdBus::CmdFrame &f)
   tmc.mA = cfg.driver_mA;
   tmc.toff = 5;
   tmc.blank = 24;
-  tmc.spreadAlways = !cfg.stealthChop;
   tmc.stealth = cfg.stealthChop;
-  tmc.spreadSwitchRPS = 6.0;
+  tmc.spreadSwitchRPS = 8.0;
   axis.configureDriver(tmc);
 
   cfgStore.save(cfg);
@@ -342,7 +292,7 @@ static void onEnabled(const CanCmdBus::CmdFrame &f)
 static void onCalibrate(const CanCmdBus::CmdFrame &f)
 {
   (void)f;
-  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 2000);
+  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 1000);
   cfgStore.save(cfg);
 }
 
@@ -352,7 +302,19 @@ static void enableEndstop(const CanCmdBus::CmdFrame &f)
   if (!readBool01(f.payload, f.len, 0, ep))
     return;
 
-  cfg.enableProtection = ep;
+  cfg.enableEndStop = ep;
+  cfgStore.save(cfg);
+}
+
+static void enableExternalEncoder(const CanCmdBus::CmdFrame &f)
+{
+  bool ex;
+  if (!readBool01(f.payload, f.len, 0, ex))
+    return;
+
+  cfg.externalEncoder = ex;
+  encoder.begin(ex ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
+                ex ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
   cfgStore.save(cfg);
 }
 
@@ -432,29 +394,23 @@ void setup()
   DBG_INIT(115200);
   EEPROM.begin();
   sensors.begin();
+  delay(100);
 
   if (!cfgStore.load(cfg))
   {
-    DBG_PRINTLN("[WARN] Config load failed, using defaults");
-    cfgStore.defaults(cfg);
     cfgStore.save(cfg);
   }
-  else
-  {
-    DBG_PRINTLN("[INFO] Config loaded");
-  }
+  delay(100);
 
   // CAN
   CanCmdBus::begin(500000, 5, PA11, PA12, true);
-#if DEVELOPER_MODE
-  CanCmdBus::setDebug(&Debug);
-#endif
   CanCmdBus::setIdFilter(cfg.canArbId, 0x7FF);
 
   // Command handlers
   CanCmdBus::registerHandler(CMD_TARGET_ANGLE, onTarget);
   CanCmdBus::registerHandler(CMD_SET_CURRENT_MA, onCurrentMA);
   CanCmdBus::registerHandler(CMD_SET_SPEED_LIMIT, onSpeedLimit);
+  CanCmdBus::registerHandler(CMD_SET_ACCEL_LIMIT, onAccelLimit);
   CanCmdBus::registerHandler(CMD_SET_PID, onPID);
   CanCmdBus::registerHandler(CMD_SET_ID, onID);
   CanCmdBus::registerHandler(CMD_SET_MICROSTEPS, onMicrosteps);
@@ -466,18 +422,24 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_STEPS_PER_REV, onStepsPerRev);
   CanCmdBus::registerHandler(CMD_DO_CALIBRATE, onCalibrate);
   CanCmdBus::registerHandler(CMD_DO_HOMING, onHoming);
-  CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndStop);
+  CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndstop);
+  CanCmdBus::registerHandler(CMD_SET_EXT_ENCODER, enableExternalEncoder);
+
+  HomingConfig hcfg{
+      static_cast<uint8_t>(PIN_HOM_IN1),
+      static_cast<uint8_t>(PIN_HOM_IN2),
+      true,
+      true,
+      0,
+      30000u,
+      0};
+
+  homing.begin(hcfg);
 
   // Encoder
-  if (!encoder.begin(PIN_I2C_SDA, PIN_I2C_SCL))
-  {
-    while (1)
-    {
-      DBG_PRINTLN("[ERR] AS5600 not found");
-      delay(500);
-    }
-  }
-  encoder.setVelAlpha(1); // mild smoothing
+  encoder.begin(cfg.externalEncoder ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
+                cfg.externalEncoder ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
+  encoder.setVelAlpha(1);
   encoder.setInvert(cfg.encInvert);
 
   // Axis + driver
@@ -488,20 +450,18 @@ void setup()
   tmc.mA = cfg.driver_mA;
   tmc.toff = 5;
   tmc.blank = 24;
-  tmc.spreadAlways = !cfg.stealthChop;
   tmc.stealth = cfg.stealthChop;
-  tmc.spreadSwitchRPS = 6.0;
+  tmc.spreadSwitchRPS = 8.0;
   axis.configureDriver(tmc);
 
-  stepgen.setFullSteps(cfg.stepsPerRev);
   axis.setFullSteps(cfg.stepsPerRev);
   axis.setPID(cfg.Kp, cfg.Ki, cfg.Kd);
-  axis.setLimits(cfg.maxRPS);
   axis.setMicrosteps(cfg.microsteps);
 
   axis.attachExternal(extPins);
   axis.setExternalMode(cfg.externalMode);
   axis.setTargetAngleRad(0);
+  delay(100);
 }
 
 void loop()
@@ -547,7 +507,7 @@ void loop()
     }
   }
 
-  if (overTemperatureProtection())
+  if (overTemperatureProtection() || !cfg.calibratedOnce)
   {
     stepgen.stop();
   }
