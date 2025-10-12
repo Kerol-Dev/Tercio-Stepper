@@ -16,7 +16,6 @@ public:
 
     void setDir(bool cw);
 
-    // Speed control
     void setStepRate(double sps);
     void stop();
     void setSpeedRPS(double rps);
@@ -27,7 +26,7 @@ private:
     uint8_t _stepPin,
         _dirPin,
         _enPin;
-    AxisConfig &_cfg;
 
+    AxisConfig &_cfg;
     HardwareTimer *_tim{nullptr};
 };

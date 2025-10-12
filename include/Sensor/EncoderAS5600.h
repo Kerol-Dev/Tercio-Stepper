@@ -14,7 +14,7 @@ public:
   void  setInvert(bool inv);
   void  setVelAlpha(float a);
 
-  void  update(double dt_s); // call regularly with measured dt (seconds)
+  void  update(double dt_s); // called regularly with measured dt (seconds)
 
   double angle(Units u = Radians) const;
   double velocity(Units u = Radians) const;
@@ -35,6 +35,6 @@ private:
   int32_t  _cont{0};      // continuous counts since last zero
   double   _velCps{0.0};  // counts per second (LPF)
 
-  float    _alpha{0.2f};  // velocity LPF coefficient
+  float    _alpha{0.5f};  // velocity LPF coefficient
   bool     _invert{false};
 };

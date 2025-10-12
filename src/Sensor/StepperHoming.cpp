@@ -1,4 +1,5 @@
 #include "StepperHoming.h"
+#include "Main.h"
 
 bool StepperHoming::begin(const HomingConfig& cfg) {
   _cfg = cfg;
@@ -30,18 +31,20 @@ bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, SetFn 
 
   while (!timeout()) {
     update();
+    enc.update(0.01);
     if ((useMin && _minTrig) || (!useMin && _maxTrig)) break;
     delay(1);
   }
   stop();
   if (timeout()) return false;
 
+  delay(2000);
   
   // Back off
   enc.update(0.01); // update once to avoid large jump
   double start = enc.angle();
   setVel(-vel);
-  while (!timeout()) {
+  while (true) {
     enc.update(0.01);
     double d = fabsf(enc.angle() - start);
     if (d >= _cfg.backoffOffset) break;
@@ -49,6 +52,7 @@ bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, SetFn 
   }
   stop();
 
+  DBG_PRINTLN("Homing: backoff done");
   // Zero encoder
   setZero(0.0f);
   return true;

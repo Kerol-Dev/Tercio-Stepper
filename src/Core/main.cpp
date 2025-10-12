@@ -18,11 +18,6 @@
 #include "Main.h"
 
 // -----------------------------------------------------------------------------
-// Developer mode (compile-time)
-// Set to 0 for production builds to avoid creating a hardware UART for debug.
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
 // Commands
 // -----------------------------------------------------------------------------
 enum : uint8_t
@@ -51,9 +46,11 @@ enum : uint8_t
 // -----------------------------------------------------------------------------
 static constexpr uint8_t PIN_STEP = PB14;
 static constexpr uint8_t PIN_DIR = PB15;
-static constexpr uint8_t PIN_EN = PB5; // EN active-low
+static constexpr uint8_t PIN_EN = PB5;
 static constexpr uint8_t PIN_I2C_SDA = PB7;
 static constexpr uint8_t PIN_I2C_SCL = PA15;
+static constexpr uint8_t PIN_EXT_I2C_SDA = PA8;
+static constexpr uint8_t PIN_EXT_I2C_SCL = PA9;
 static constexpr uint8_t PIN_HOM_IN1 = PB12;
 static constexpr uint8_t PIN_HOM_IN2 = PB13;
 
@@ -75,7 +72,7 @@ TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
 AxisController axis(encoder, stepgen, driver, cfg);
 
 AxisController::ExtPins extPins{
-    /*step*/ PA0, /*dir*/ PA1, /*en*/ PA4, /*enActiveLow*/ true};
+    /*step*/ PA1, /*dir*/ PB3, /*en*/ PA0, /*enActiveLow*/ true};
 
 static float g_dtSec = 0.f;
 static unsigned long g_lastMs = 0;
@@ -90,7 +87,7 @@ struct HomingWire
   uint8_t useMINTrigger; // 0/1
   float offset;          // device units (deg/rad per cfg.units)
   uint8_t activeLow;     // 0/1
-  float speed;           // rps (or chosen units)
+  float speed;           // rps
   uint8_t direction;     // 0=negative, 1=positive
 };
 #pragma pack(pop)
@@ -165,8 +162,9 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
       // setVel
       [&](float v)
       {
-        const float sp = dirPos ? fabsf(v) : -fabsf(v);
-        stepgen.setSpeedRPS(sp);
+        if (!dirPos)
+          v = -v;
+        stepgen.setSpeedRPS(v);
       },
       // stop
       [&]()
@@ -268,7 +266,7 @@ static void onStealthChop(const CanCmdBus::CmdFrame &f)
   tmc.toff = 5;
   tmc.blank = 24;
   tmc.stealth = cfg.stealthChop;
-  tmc.spreadSwitchRPS = 5.0;
+  tmc.spreadSwitchRPS = 8.0;
   axis.configureDriver(tmc);
 
   cfgStore.save(cfg);
@@ -316,6 +314,8 @@ static void onExtMode(const CanCmdBus::CmdFrame &f)
 
   cfg.externalMode = em;
   axis.setExternalMode(cfg.externalMode);
+  encoder.begin(em ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
+                em ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
   cfgStore.save(cfg);
 }
 
@@ -413,15 +413,9 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndstop);
 
   // Encoder
-  if (!encoder.begin(PIN_I2C_SDA, PIN_I2C_SCL))
-  {
-    while (1)
-    {
-      DBG_PRINTLN("[ERR] AS5600 not found");
-      delay(500);
-    }
-  }
-  encoder.setVelAlpha(1); // mild smoothing
+  encoder.begin(cfg.externalMode ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
+                cfg.externalMode ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
+  encoder.setVelAlpha(1);
   encoder.setInvert(cfg.encInvert);
 
   // Axis + driver
@@ -433,7 +427,7 @@ void setup()
   tmc.toff = 5;
   tmc.blank = 24;
   tmc.stealth = cfg.stealthChop;
-  tmc.spreadSwitchRPS = 5.0;
+  tmc.spreadSwitchRPS = 8.0;
   axis.configureDriver(tmc);
 
   axis.setFullSteps(cfg.stepsPerRev);

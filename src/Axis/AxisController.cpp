@@ -54,16 +54,10 @@ void AxisController::configureDriver(const TmcConfig &c)
 {
   _tmc.begin();
   _tmc.shaft(false);
-  _tmc.toff(5);
+  _tmc.toff(c.toff);
   _tmc.blank_time(c.blank);
   _tmc.rms_current(c.mA);
   _tmc.pwm_autoscale(true);
-  _tmc.pwm_freq(2);
-  _tmc.pwm_lim(10);
-  _tmc.TCOOLTHRS(0);
-  _tmc.hstrt(4);
-  _tmc.hend(1);
-  _tmc.tbl(2);
   _tmc.intpol(true);
   _tmc.vsense(false);
 
@@ -184,21 +178,18 @@ void AxisController::update(double dt)
   // PID proposes velocity (rps)
   const double vel_target = _pid.compute(err, dt);
 
-  // ---- Guard against timing glitches: clamp dt used for acceleration ----
-  // Use a sane control-window for accel math (e.g., 0.001–0.02 s)
-  //  -> At rps2=2, this yields dv in [0.002 .. 0.04] rps per tick.
   const double dt_eff = std::clamp(dt, 0.001, 0.020);
-  const double dv_max = _cfg.maxRPS2 * dt_eff;   // rps per cycle
+  const double dv_max = _cfg.maxRPS2 * dt_eff; // rps per cycle
 
-  // ---------- ONLY ACCELERATE; DECELERATE INSTANTLY ----------
   double new_cmd;
 
-  if (fabs(vel_target) > fabs(_cmdRPS) && (fabs(vel_target - _cmdRPS) > dv_max)) {
-    // Need more speed magnitude -> accelerate toward vel_target, limited by dv_max
+  if (fabs(vel_target) > fabs(_cmdRPS) && (fabs(vel_target - _cmdRPS) > dv_max))
+  {
     const double sign = (vel_target > _cmdRPS) ? +1.0 : -1.0;
     new_cmd = _cmdRPS + sign * dv_max;
-  } else {
-    // Want less magnitude OR within dv_max -> instant decel / direct set
+  }
+  else
+  {
     new_cmd = vel_target;
   }
 
@@ -208,23 +199,10 @@ void AxisController::update(double dt)
                        static_cast<double>(_cfg.maxRPS));
   const bool speed_cap = (new_cmd != _cmdRPS);
 
-  _stepgen.setSpeedRPS(_cmdRPS);
-
-  // ---------- Low-noise debug ----------
-  static double last_cmd = NAN;
-  static uint32_t last_ms = 0;
-  const uint32_t now = millis();
-
-  const float CMD_EPS = 0.05f;   // rps
-  const uint32_t MIN_PERIOD_MS = 15;
-
-  if ( (std::isnan(last_cmd) || fabs(_cmdRPS - last_cmd) > CMD_EPS || accel_phase || speed_cap)
-       && (now - last_ms) >= MIN_PERIOD_MS )
-  {
-    DBG_PRINTLN(_cmdRPS);
-    last_cmd = _cmdRPS;
-    last_ms  = now;
-  }
+  if (fabs(_cmdRPS) <= 0.005)
+    _stepgen.setSpeedRPS(0);
+  else
+    _stepgen.setSpeedRPS(_cmdRPS);
 }
 
 void AxisController::setSpreadSwitchRPS(double rps)

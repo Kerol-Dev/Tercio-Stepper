@@ -29,7 +29,7 @@ public:
   struct TmcConfig
   {
     uint16_t mA{1200};
-    uint8_t toff{4};
+    uint8_t toff{5};
     uint8_t blank{24};
     bool stealth{true};
     double spreadSwitchRPS{5.0};
@@ -70,15 +70,14 @@ private:
   AxisConfig &_cfg;
   StepperControl &_stepgen;
 
-  double _ustepAngleRad{(2.0 * PI) / (200.0 * 16.0)};
-
   SimplePID _pid{};
   ExtPins _ext{};
   bool _externalMode{false};
 
   volatile int32_t _extStepPulses{0};
   static AxisController *s_owner;
-
+  
+  double _ustepAngleRad{(2.0 * PI) / (200.0 * 16.0)};
   double _targetRad{0.0};
   double _cmdRPS{0.0};
   double _spreadSwitchRPS{5.0};

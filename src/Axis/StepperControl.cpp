@@ -1,5 +1,6 @@
 #include "StepperControl.h"
 #include <HardwareTimer.h>
+#include <Main.h>
 #include <algorithm>
 
 // ----------------------------------------------------------------------------
@@ -7,7 +8,7 @@
 // ----------------------------------------------------------------------------
 namespace {
   constexpr uint8_t  kPwmChannel    = 2;      // TIM1 CH2 -> PB14
-  constexpr double   kMinActiveSps  = 0.01;   // below this, treat as stopped (no pulses)
+  constexpr double   kMinActiveSps  = 0.05;   // below this, treat as stopped (no pulses)
   constexpr uint32_t kMinARR        = 2;      // need >=2 ticks to get a 50% pulse cleanly
   constexpr uint32_t kMaxARR        = 65535;  // 16-bit advanced timer (TIM1) max ARR
   constexpr uint32_t kMinPSC        = 1;      // HardwareTimer takes the *factor* (PSC+1); 1 -> no prescale
@@ -59,22 +60,16 @@ void StepperControl::setStepRate(double sps) {
   // Target STEP frequency (Hz)
   const double f_target = std::max(0.0, sps);
 
-  // Timer input clock (after APB multipliers)
-  const uint32_t f_tim = _tim->getTimerClkFreq(); // e.g., 170 MHz on some STM32G4
-  // total ticks needed per period at PSC=1
+  const uint32_t f_tim = _tim->getTimerClkFreq();
   const double ticks_total = static_cast<double>(f_tim) / f_target;
 
-  // Choose prescaler factor so that ARR fits in [kMinARR .. kMaxARR]
-  // presc_factor = ceil(ticks_total / kMaxARR)
   uint32_t presc = (ticks_total > static_cast<double>(kMaxARR))
                      ? static_cast<uint32_t>( (ticks_total + kMaxARR - 1.0) / kMaxARR )
                      : 1u;
   if (presc < kMinPSC) presc = kMinPSC;
   if (presc > kMaxPSC) presc = kMaxPSC;
 
-  // Compute ARR at that prescale
   double arr_f = ticks_total / static_cast<double>(presc);
-  // Bound and round
   uint32_t arr = static_cast<uint32_t>(std::clamp(arr_f, static_cast<double>(kMinARR),
                                                   static_cast<double>(kMaxARR)));
   if (arr < kMinARR)  arr = kMinARR;

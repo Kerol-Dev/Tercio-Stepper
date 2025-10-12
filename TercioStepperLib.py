@@ -1,25 +1,14 @@
 from __future__ import annotations
 
-import logging
 import struct
 import threading
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, Optional, Iterable
+from typing import Dict, Optional
 
 import serial
 from serial.tools import list_ports
-
-# -------------------------------------------------------------------
-# Logging (silent by default). Pass verbose=True to Bridge() to enable.
-# -------------------------------------------------------------------
-_logger = logging.getLogger("can_bridge")
-_logger.addHandler(logging.NullHandler())
-
-# -------------------------------------------------------------------
-# Protocol
-# -------------------------------------------------------------------
 
 MAX_PAYLOAD = 64
 
@@ -42,30 +31,20 @@ class Cmd(IntEnum):
     DO_HOMING          = 0x0E
     SET_ENDSTOP        = 0x0F
 
-# Telemetry emitted by firmware (broadcast)
 TELEMETRY_CAN_ID: int = 0x000
 TELEMETRY_CMD: int    = 0x01
 
-# Frame header: <HBB> = can_id (u16 LE), cmd (u8), len (u8)
 HDR_FMT = "<HBB"
 HDR_SIZE = struct.calcsize(HDR_FMT)
 
-# Config & telemetry wire formats (little-endian)
-# NOTE: version (u8) is included right after crc32 (u32).
 AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
-# DATAPACKET = AxisConfig + four float32: currentSpeed, currentAngle, targetAngle, temperature
 DATAPACKET_FMT  = "<I H H B B H H f f f f f H f f f f"
 DATAPACKET_SIZE = struct.calcsize(DATAPACKET_FMT)
 
-# Homing parameter payload: <B f B f B>
 HOMING_WIRE_FMT  = "<B f B f B"
 HOMING_WIRE_SIZE = struct.calcsize(HOMING_WIRE_FMT)
-
-# -------------------------------------------------------------------
-# Packing helpers
-# -------------------------------------------------------------------
 
 def _pack_u8(v: int)  -> bytes: return struct.pack("<B", v & 0xFF)
 def _pack_u16(v: int) -> bytes: return struct.pack("<H", v & 0xFFFF)
@@ -81,17 +60,12 @@ def _make_frame(can_id: int, cmd: int, payload: bytes) -> bytes:
         raise ValueError(f"payload length must be 0..{MAX_PAYLOAD}")
     return struct.pack(HDR_FMT, can_id, cmd, len(payload)) + payload
 
-# -------------------------------------------------------------------
-# Models
-# -------------------------------------------------------------------
-
 @dataclass
 class HomingParams:
-    """Parameters sent with DO_HOMING (device interprets units per cfg)."""
     useIN1Trigger: bool = True
     offset: float = 0.0
     activeLow: bool = True
-    speed: float = 0.5
+    speed: float = 1.0
     direction: bool = True
 
 def _pack_homing(p: HomingParams) -> bytes:
@@ -140,14 +114,9 @@ class AxisState:
     temperature : Optional[float] = None
     timestamp: float = field(default_factory=time.time)
 
-# -------------------------------------------------------------------
-# Parsing
-# -------------------------------------------------------------------
-
 def _parse_axis_config_wire(b: bytes) -> AxisConfig:
     (crc32, microsteps, steps_per_rev, units, flags,
      enc_zero_counts, driver_mA, maxRPS, maxRPS2, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
-
     fl = AxisFlags(
         encInvert=bool(flags & 0x01),
         dirInvert=bool(flags & 0x02),
@@ -181,45 +150,24 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
     currentSpeed, currentAngle, targetAngle, temperature = fields[13], fields[14], fields[15], fields[16]
     return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, time.time())
 
-# -------------------------------------------------------------------
-# Bridge
-# -------------------------------------------------------------------
-
 class Bridge:
-    """
-    USB bridge for the CAN/CAN-FD serial gateway.
-    - You may share one Bridge across many Stepper() instances (one per CAN ID).
-    - If port is None, the bridge tries to auto-discover a single suitable USB serial device.
-    """
-
     def __init__(
         self,
         port: Optional[str] = None,
         baudrate: int = 115200,
         timeout_s: float = 0.05,
-        verbose: bool = False,
         auto_reader: bool = True,
     ):
         self.port = port
         self.baudrate = baudrate
         self.timeout_s = timeout_s
         self.auto_reader = auto_reader
-
-        # logging
-        if verbose:
-            _logger.setLevel(logging.DEBUG)
-            if not _logger.handlers:
-                _logger.addHandler(logging.StreamHandler())
-
         self._ser: Optional[serial.Serial] = None
         self._reader: Optional[threading.Thread] = None
         self._stop_evt = threading.Event()
-
         self._state: Dict[int, AxisState] = {}
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
-
-    # ----- discovery helpers -----
 
     @staticmethod
     def find_port(
@@ -229,13 +177,6 @@ class Bridge:
         product_substr: Optional[str] = None,
         manufacturer_substr: Optional[str] = None,
     ) -> str:
-        """
-        Auto-find a single USB-serial port that looks like the CAN-FD bridge.
-        You can filter by VID/PID or by product/manufacturer substring.
-
-        Raises:
-            RuntimeError if none or multiple candidates are found.
-        """
         def matches(p) -> bool:
             if vid is not None and p.vid != vid:
                 return False
@@ -246,13 +187,10 @@ class Bridge:
             if manufacturer_substr and (not p.manufacturer or manufacturer_substr.lower() not in p.manufacturer.lower()):
                 return False
             return True
-
         ports = list(list_ports.comports())
         cands = [p for p in ports if matches(p)]
-        # If no filter provided, accept all and require uniqueness.
         if not any([vid, pid, product_substr, manufacturer_substr]):
             cands = ports
-
         if len(cands) == 0:
             raise RuntimeError("No USB-serial ports found for CAN bridge.")
         if len(cands) > 1:
@@ -260,10 +198,8 @@ class Bridge:
             raise RuntimeError(f"Multiple serial ports found; specify one. Candidates: {desc}")
         return cands[0].device
 
-    # ---------- lifecycle ----------
-
     def open(self) -> None:
-        port = self.port or self.find_port()  # auto-detect if not provided
+        port = self.port or self.find_port()
         self._ser = serial.Serial(port, self.baudrate, timeout=self.timeout_s)
         if self.auto_reader:
             self.start_reader()
@@ -289,15 +225,12 @@ class Bridge:
             self._reader.join(timeout=1.5)
         self._reader = None
 
-    # ---------- low-level I/O ----------
-
     def _send(self, can_id: int, cmd: int | Cmd, payload: bytes = b"") -> None:
         if self._ser is None:
             raise RuntimeError("serial not open")
         frame = _make_frame(can_id, int(cmd), payload)
         self._ser.write(frame)
         self._ser.flush()
-        _logger.debug("TX id=%03X cmd=%02X len=%d %s", can_id, int(cmd), len(payload), payload.hex())
 
     def _reader_loop(self) -> None:
         if self._ser is None:
@@ -309,7 +242,7 @@ class Bridge:
             while len(out) < n and not self._stop_evt.is_set():
                 chunk = ser.read(n - len(out))
                 if not chunk:
-                    continue  # timeout
+                    continue
                 out.extend(chunk)
             return bytes(out) if len(out) == n else None
 
@@ -320,27 +253,19 @@ class Bridge:
                     continue
                 can_id, cmd, length = struct.unpack(HDR_FMT, hdr)
                 if length > MAX_PAYLOAD:
-                    _logger.debug("RX bad length=%d (drop)", length)
-                    _ = ser.read(length)  # drain
+                    _ = ser.read(length)
                     continue
                 payload = read_exact(length) or b""
-                _logger.debug("RX id=%03X cmd=%02X len=%d %s", can_id, cmd, len(payload), payload.hex())
-
-                # telemetry fanout
                 if can_id == TELEMETRY_CAN_ID and cmd == TELEMETRY_CMD:
                     pkt = _parse_datapacket(payload)
                     if pkt and pkt.config:
                         with self._lock:
                             self._state[pkt.config.canArbId] = pkt
                             self._cond.notify_all()
-
-            except serial.SerialException as e:
-                _logger.debug("serial error: %s", e)
+            except serial.SerialException:
                 break
-            except Exception as e:
-                _logger.debug("reader error: %s", e)
-
-    # ---------- command helpers (SET) ----------
+            except Exception:
+                pass
 
     def set_target_angle(self, can_id: int, angle: float) -> None:
         self._send(can_id, Cmd.TARGET_ANGLE, _pack_f32(angle))
@@ -369,6 +294,9 @@ class Bridge:
     def set_external_mode(self, can_id: int, enable: bool) -> None:
         self._send(can_id, Cmd.SET_EXT_MODE, _pack_bool01(enable))
 
+    def set_endstop(self, can_id: int, enable: bool) -> None:
+        self._send(can_id, Cmd.SET_ENDSTOP, _pack_bool01(enable))
+
     def set_external_encoder(self, can_id: int, enable: bool) -> None:
         self._send(can_id, Cmd.SET_EXT_ENCODER, _pack_bool01(enable))
 
@@ -389,8 +317,6 @@ class Bridge:
 
     def do_homing(self, can_id: int, params: HomingParams) -> None:
         self._send(can_id, Cmd.DO_HOMING, _pack_homing(params))
-
-    # ---------- telemetry access (GET) ----------
 
     def _wait_state(self, can_id: int, timeout_s: Optional[float]) -> Optional[AxisState]:
         deadline = None if timeout_s is None else (time.time() + timeout_s)
@@ -423,23 +349,13 @@ class Bridge:
     def get_axis_state(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[AxisState]:
         return self._wait_state(can_id, timeout_s)
 
-# -------------------------------------------------------------------
-# Per-motor convenience proxy
-# -------------------------------------------------------------------
-
 class Stepper:
-    """
-    Convenience wrapper around Bridge for a single motor (CAN ID).
-    You can create many Stepper() objects sharing one Bridge.
-    """
-
     def __init__(self, bridge: Bridge, can_id: int):
         if not (0 <= can_id <= 0x7FF):
             raise ValueError("can_id must be 11-bit (0..0x7FF)")
         self.bridge = bridge
         self.can_id = can_id
 
-    # ---- setters ----
     def set_target_angle(self, angle: float) -> None:
         self.bridge.set_target_angle(self.can_id, angle)
 
@@ -468,6 +384,9 @@ class Stepper:
     def set_external_mode(self, enable: bool) -> None:
         self.bridge.set_external_mode(self.can_id, enable)
 
+    def set_endstop(self, enable: bool) -> None:
+        self.bridge.set_endstop(self.can_id, enable)
+
     def set_external_encoder(self, enable: bool) -> None:
         self.bridge.set_external_encoder(self.can_id, enable)
 
@@ -489,7 +408,6 @@ class Stepper:
     def do_homing(self, params: HomingParams) -> None:
         self.bridge.do_homing(self.can_id, params)
 
-    # ---- getters ----
     def get_axis_state(self, timeout_s: Optional[float] = None) -> Optional[AxisState]:
         return self.bridge.get_axis_state(self.can_id, timeout_s)
 
