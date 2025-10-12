@@ -1,4 +1,5 @@
 #include "AxisController.h"
+#include "Main.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,18 +14,10 @@ void SimplePID::setTunings(double Kp, double Ki, double Kd)
   kd = Kd;
 }
 
-void SimplePID::setOutputLimits(double mn, double mx)
-{
-  outMin = mn;
-  outMax = mx;
-  integ = std::clamp(integ, outMin, outMax);
-}
-
 double SimplePID::compute(double err, double dt)
 {
   // I
   integ += err * ki * dt;
-  integ = std::clamp(integ, outMin, outMax);
 
   // D
   const double deriv = (dt > 0.0) ? (err - ePrev) / dt : 0.0;
@@ -32,7 +25,7 @@ double SimplePID::compute(double err, double dt)
 
   // P + I + D
   double u = kp * err + integ + kd * deriv;
-  return std::clamp(u, outMin, outMax);
+  return u;
 }
 
 // ============================================================================
@@ -61,17 +54,18 @@ void AxisController::configureDriver(const TmcConfig &c)
 {
   _tmc.begin();
   _tmc.shaft(false);
-  _tmc.toff(c.toff);
+  _tmc.toff(5);
   _tmc.blank_time(c.blank);
   _tmc.rms_current(c.mA);
   _tmc.pwm_autoscale(true);
-  _tmc.intpol(true);
-
-  // Keep coils energized; disable runtime features we don't use
-  _tmc.TPOWERDOWN(0);
+  _tmc.pwm_freq(2);
+  _tmc.pwm_lim(10);
   _tmc.TCOOLTHRS(0);
-  _tmc.freewheel(0);
-  _tmc.SGTHRS(0);
+  _tmc.hstrt(4);
+  _tmc.hend(1);
+  _tmc.tbl(2);
+  _tmc.intpol(true);
+  _tmc.vsense(false);
 
   if (c.stealth)
   {
@@ -151,6 +145,7 @@ void AxisController::attachExternal(const ExtPins &p)
 
 void AxisController::update(double dt)
 {
+  // ---------- External step/dir ----------
   if (_externalMode && _ext.step >= 0)
   {
     int32_t pulses = 0;
@@ -163,6 +158,8 @@ void AxisController::update(double dt)
     {
       const int sgn = (_ext.dir >= 0) ? (digitalRead(_ext.dir) ? +1 : -1) : +1;
       _targetRad += static_cast<double>(pulses * sgn) * _ustepAngleRad;
+      DBG_PRINTF("[EXT] pulses=%ld dir=%d newTarget=%.4f rad\n",
+                 (long)pulses, sgn, _targetRad);
     }
     if (_ext.en >= 0)
     {
@@ -184,19 +181,50 @@ void AxisController::update(double dt)
   const double pos = _enc.angle(); // radians
   const double err = _targetRad - pos;
 
-  double vel_target = _pid.compute(err, dt);
+  // PID proposes velocity (rps)
+  const double vel_target = _pid.compute(err, dt);
 
-  if (vel_target > _cmdRPS && fabs(vel_target - _cmdRPS) > (_cfg.maxRPS2 * dt))
-  {
-    _cmdRPS += (_cfg.maxRPS2 * dt);
+  // ---- Guard against timing glitches: clamp dt used for acceleration ----
+  // Use a sane control-window for accel math (e.g., 0.001–0.02 s)
+  //  -> At rps2=2, this yields dv in [0.002 .. 0.04] rps per tick.
+  const double dt_eff = std::clamp(dt, 0.001, 0.020);
+  const double dv_max = _cfg.maxRPS2 * dt_eff;   // rps per cycle
+
+  // ---------- ONLY ACCELERATE; DECELERATE INSTANTLY ----------
+  double new_cmd;
+
+  if (fabs(vel_target) > fabs(_cmdRPS) && (fabs(vel_target - _cmdRPS) > dv_max)) {
+    // Need more speed magnitude -> accelerate toward vel_target, limited by dv_max
+    const double sign = (vel_target > _cmdRPS) ? +1.0 : -1.0;
+    new_cmd = _cmdRPS + sign * dv_max;
+  } else {
+    // Want less magnitude OR within dv_max -> instant decel / direct set
+    new_cmd = vel_target;
   }
-  else
-    _cmdRPS = vel_target;
 
-  _cmdRPS = std::clamp(_cmdRPS, -static_cast<double>(_cfg.maxRPS), static_cast<double>(_cfg.maxRPS));
+  const bool accel_phase = (fabs(new_cmd) > fabs(_cmdRPS));
+  _cmdRPS = std::clamp(new_cmd,
+                       -static_cast<double>(_cfg.maxRPS),
+                       static_cast<double>(_cfg.maxRPS));
+  const bool speed_cap = (new_cmd != _cmdRPS);
 
   _stepgen.setSpeedRPS(_cmdRPS);
-  _stepgen.service();
+
+  // ---------- Low-noise debug ----------
+  static double last_cmd = NAN;
+  static uint32_t last_ms = 0;
+  const uint32_t now = millis();
+
+  const float CMD_EPS = 0.05f;   // rps
+  const uint32_t MIN_PERIOD_MS = 15;
+
+  if ( (std::isnan(last_cmd) || fabs(_cmdRPS - last_cmd) > CMD_EPS || accel_phase || speed_cap)
+       && (now - last_ms) >= MIN_PERIOD_MS )
+  {
+    DBG_PRINTLN(_cmdRPS);
+    last_cmd = _cmdRPS;
+    last_ms  = now;
+  }
 }
 
 void AxisController::setSpreadSwitchRPS(double rps)

@@ -21,60 +21,6 @@
 // Developer mode (compile-time)
 // Set to 0 for production builds to avoid creating a hardware UART for debug.
 // -----------------------------------------------------------------------------
-#ifndef DEVELOPER_MODE
-#define DEVELOPER_MODE 1
-#endif
-constexpr bool kDeveloperMode = (DEVELOPER_MODE != 0);
-
-// Debug sink
-#if DEVELOPER_MODE
-// Debug UART (PA2 TX-only). RX=PA3 (unused), TX=PA2
-HardwareSerial Debug(PA3, PA2);
-#else
-// Minimal no-op stream compatible with Print-like interfaces used by the firmware.
-class NullStream : public Print
-{
-public:
-  void begin(unsigned long) {}
-  void println(const char *) {}
-  void printf(const char *, ...) {}
-  size_t write(uint8_t) override { return 1; }
-  using Print::write;
-};
-static NullStream Debug;
-#endif
-
-// Debug macros
-#if DEVELOPER_MODE
-#define DBG_INIT(baud) \
-  do                   \
-  {                    \
-    Debug.begin(baud); \
-  } while (0)
-#define DBG_PRINTLN(msg) \
-  do                     \
-  {                      \
-    Debug.println(msg);  \
-  } while (0)
-#define DBG_PRINTF(...)        \
-  do                           \
-  {                            \
-    Debug.printf(__VA_ARGS__); \
-  } while (0)
-#else
-#define DBG_INIT(baud) \
-  do                   \
-  {                    \
-  } while (0)
-#define DBG_PRINTLN(msg) \
-  do                     \
-  {                      \
-  } while (0)
-#define DBG_PRINTF(...) \
-  do                    \
-  {                     \
-  } while (0)
-#endif
 
 // -----------------------------------------------------------------------------
 // Commands
@@ -90,6 +36,8 @@ enum : uint8_t
   CMD_SET_STEALTHCHOP = 0x07,
   CMD_SET_EXT_MODE = 0x08,
   CMD_SET_UNITS = 0x09,
+  CMD_SET_EXT_ENCODER = 0x10,
+  CMD_SET_ACCEL_LIMIT = 0x11,
   CMD_SET_ENC_INVERT = 0x0A,
   CMD_SET_ENABLED = 0x0B,
   CMD_SET_STEPS_PER_REV = 0x0C,
@@ -118,7 +66,7 @@ SensorsADC sensors;
 
 EncoderAS5600 encoder;
 StepperHoming homing;
-StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, 200);
+StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, cfg);
 
 #define R_SENSE 0.11f
 HardwareSerial TMCSerial(PA10, PB6);
@@ -242,7 +190,6 @@ static void onStepsPerRev(const CanCmdBus::CmdFrame &f)
 
   cfg.stepsPerRev = rev;
   axis.setFullSteps(rev);
-  stepgen.setFullSteps(rev);
   cfgStore.save(cfg);
 }
 
@@ -253,6 +200,16 @@ static void onSpeedLimit(const CanCmdBus::CmdFrame &f)
     return;
 
   cfg.maxRPS = rps;
+  cfgStore.save(cfg);
+}
+
+static void onAccelLimit(const CanCmdBus::CmdFrame &f)
+{
+  float rps2;
+  if (!CanCmdBus::readF32(f.payload, f.len, 0, rps2))
+    return;
+
+  cfg.maxRPS2 = rps2;
   cfgStore.save(cfg);
 }
 
@@ -441,6 +398,7 @@ void setup()
   CanCmdBus::registerHandler(CMD_TARGET_ANGLE, onTarget);
   CanCmdBus::registerHandler(CMD_SET_CURRENT_MA, onCurrentMA);
   CanCmdBus::registerHandler(CMD_SET_SPEED_LIMIT, onSpeedLimit);
+  CanCmdBus::registerHandler(CMD_SET_ACCEL_LIMIT, onAccelLimit);
   CanCmdBus::registerHandler(CMD_SET_PID, onPID);
   CanCmdBus::registerHandler(CMD_SET_ID, onID);
   CanCmdBus::registerHandler(CMD_SET_MICROSTEPS, onMicrosteps);
@@ -478,7 +436,6 @@ void setup()
   tmc.spreadSwitchRPS = 5.0;
   axis.configureDriver(tmc);
 
-  stepgen.setFullSteps(cfg.stepsPerRev);
   axis.setFullSteps(cfg.stepsPerRev);
   axis.setPID(cfg.Kp, cfg.Ki, cfg.Kd);
   axis.setMicrosteps(cfg.microsteps);

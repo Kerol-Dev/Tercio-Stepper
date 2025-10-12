@@ -7,7 +7,7 @@ class HardwareTimer;
 class StepperControl
 {
 public:
-    StepperControl(uint8_t stepPin, uint8_t dirPin, uint8_t enPin, AxisConfig cfg);
+    StepperControl(uint8_t stepPin, uint8_t dirPin, uint8_t enPin, AxisConfig &cfg);
 
     void begin();
 
@@ -21,13 +21,13 @@ public:
     void stop();
     void setSpeedRPS(double rps);
 
-    double StepperControl::stepsPerRev();
+    double stepsPerRev();
 
 private:
     uint8_t _stepPin,
         _dirPin,
         _enPin;
-    AxisConfig _cfg;
+    AxisConfig &_cfg;
 
     HardwareTimer *_tim{nullptr};
 };
