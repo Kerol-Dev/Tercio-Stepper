@@ -12,8 +12,6 @@ struct AxisConfig {
   bool     dirInvert = false;
   bool     stealthChop = true;
   bool     externalMode = false;
-  bool     minTriggered = false;
-  bool     maxTriggered = false;
   bool     enableEndStop = false;
   bool     externalEncoder = false;
   bool     calibratedOnce = false;
@@ -52,7 +50,7 @@ inline AxisConfigWire toWire(const AxisConfig& cfg) {
   w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;
   w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
-                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.minTriggered?16:0) | (cfg.maxTriggered?32:0) | (cfg.enableEndStop?64:0) | (cfg.externalEncoder?128:0);
+                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.enableEndStop?16:0) | (cfg.externalEncoder?32:0);
   w.encZeroCounts= cfg.encZeroCounts;
   w.driver_mA    = cfg.driver_mA;
   w.maxRPS       = cfg.maxRPS;

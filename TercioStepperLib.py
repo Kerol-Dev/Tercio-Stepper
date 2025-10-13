@@ -63,7 +63,7 @@ def _make_frame(can_id: int, cmd: int, payload: bytes) -> bytes:
 
 @dataclass
 class HomingParams:
-    useIN1Trigger: bool = True
+    useMINTrigger: bool = True
     offset: float = 0.0
     activeLow: bool = True
     speed: float = 1.0
@@ -87,8 +87,6 @@ class AxisFlags:
     dirInvert: bool
     stealthChop: bool
     externalMode: bool
-    minTriggered: bool
-    maxTriggered: bool
     enableEndstop : bool
     externalEncoder : bool
 
@@ -116,6 +114,8 @@ class AxisState:
     currentAngle: Optional[float] = None
     targetAngle: Optional[float] = None
     temperature: Optional[float] = None
+    minTriggered: Optional[bool] = None
+    maxTriggered: Optional[bool] = None
     timestamp: float = field(default_factory=time.time)
 
 def _parse_axis_config_wire(b: bytes) -> AxisConfig:
@@ -126,10 +126,8 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         dirInvert=bool(flags & 0x02),
         stealthChop=bool(flags & 0x04),
         externalMode=bool(flags & 0x08),
-        minTriggered=bool(flags & 0x10),
-        maxTriggered=bool(flags & 0x20),
-        enableEndstop=bool(flags & 0x40),
-        externalEncoder=bool(flags & 0x80)
+        enableEndstop=bool(flags & 0x10),
+        externalEncoder=bool(flags & 0x20)
     )
     return AxisConfig(
         crc32=crc32,
@@ -154,8 +152,8 @@ def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
     # ---- FIX: first 12 values are AxisConfig, not 13
     cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:12])
     cfg = _parse_axis_config_wire(cfg_bytes)
-    currentSpeed, currentAngle, targetAngle, temperature = fields[13], fields[14], fields[15], fields[16]
-    return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, time.time())
+    currentSpeed, currentAngle, targetAngle, temperature, minTriggered, maxTriggered, = fields[13], fields[14], fields[15], fields[16], fields[17], fields[18]
+    return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, minTriggered, maxTriggered, time.time())
 
 class Bridge:
     def __init__(

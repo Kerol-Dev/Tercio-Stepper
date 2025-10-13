@@ -318,7 +318,7 @@ static void enableExternalEncoder(const CanCmdBus::CmdFrame &f)
   cfgStore.save(cfg);
 }
 
-static void onExtMode(const CanCmdBus::CmdFrame &f)
+static void onExternalMode(const CanCmdBus::CmdFrame &f)
 {
   bool em;
   if (!readBool01(f.payload, f.len, 0, em))
@@ -362,6 +362,8 @@ static void sendData()
     float currentAngle;
     float targetAngle;
     float temperature;
+    bool  minTriggered = false;
+    bool  maxTriggered = false;
   };
 
   DataPacket pkt;
@@ -373,6 +375,8 @@ static void sendData()
                                           : EncoderAS5600::Radians);
   pkt.targetAngle = axis.targetAngleRad() * (useDeg ? RAD_TO_DEG : 1.0);
   pkt.temperature = sensors.temperatureC();
+  pkt.minTriggered = homing.maxTriggered();
+  pkt.maxTriggered = homing.maxTriggered();
   pkt.config = toWire(cfg);
 
   if (!CanCmdBus::sendStruct(0x000, 0x01, pkt))
@@ -415,7 +419,7 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_ID, onID);
   CanCmdBus::registerHandler(CMD_SET_MICROSTEPS, onMicrosteps);
   CanCmdBus::registerHandler(CMD_SET_STEALTHCHOP, onStealthChop);
-  CanCmdBus::registerHandler(CMD_SET_EXT_MODE, onExtMode);
+  CanCmdBus::registerHandler(CMD_SET_EXT_MODE, onExternalMode);
   CanCmdBus::registerHandler(CMD_SET_UNITS, onUnits);
   CanCmdBus::registerHandler(CMD_SET_ENC_INVERT, onEncInvert);
   CanCmdBus::registerHandler(CMD_SET_ENABLED, onEnabled);
@@ -474,9 +478,6 @@ void loop()
   sensors.update();
   homing.update();
 
-  cfg.minTriggered = homing.minTriggered();
-  cfg.maxTriggered = homing.maxTriggered();
-
   if (cfg.enableEndStop)
   {
     if (homing.minTriggered())
@@ -509,6 +510,7 @@ void loop()
 
   if (overTemperatureProtection() || !cfg.calibratedOnce)
   {
+    axis.setTargetAngleRad(0);
     stepgen.stop();
   }
 

@@ -8,7 +8,7 @@ bridge.open()
 homingparams = HomingParams()
 homingparams.activeLow = True
 homingparams.direction = False
-homingparams.useIN1Trigger = True
+homingparams.useMINTrigger = True
 homingparams.offset = 3.14
 homingparams.speed = 0.5 
 
@@ -28,3 +28,4 @@ stepper.set_target_angle(-1000)
 while True:
     if(stepper.get_axis_state() is not None):
         print(stepper.get_axis_state().currentAngle)
+        time.sleep(0.2)

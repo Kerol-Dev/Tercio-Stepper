@@ -32,7 +32,7 @@ public:
     uint8_t toff{5};
     uint8_t blank{24};
     bool stealth{true};
-    double spreadSwitchRPS{5.0};
+    double spreadSwitchRPS{8.0};
   };
 
   AxisController(EncoderAS5600 &enc,
