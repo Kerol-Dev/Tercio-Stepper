@@ -33,6 +33,7 @@ enum : uint8_t
   CMD_SET_UNITS = 0x09,
   CMD_SET_EXT_ENCODER = 0x10,
   CMD_SET_ACCEL_LIMIT = 0x11,
+  CMD_SET_DIR_INVERT = 0x12,
   CMD_SET_ENC_INVERT = 0x0A,
   CMD_SET_ENABLED = 0x0B,
   CMD_SET_STEPS_PER_REV = 0x0C,
@@ -171,6 +172,8 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
       { stepgen.stop(); },
       // encoder
       encoder,
+      axis,
+      cfg,
       // setZero
       [&](float /*z*/)
       {
@@ -350,6 +353,17 @@ static void onEncInvert(const CanCmdBus::CmdFrame &f)
   cfgStore.save(cfg);
 }
 
+static void onDirInvert(const CanCmdBus::CmdFrame &f)
+{
+  bool dir;
+  if (!readBool01(f.payload, f.len, 0, dir))
+    return;
+
+  cfg.dirInvert = dir;
+  cfg.calibratedOnce = false;
+  cfgStore.save(cfg);
+}
+
 // -----------------------------------------------------------------------------
 // Telemetry (CAN broadcast)
 // -----------------------------------------------------------------------------
@@ -375,7 +389,7 @@ static void sendData()
                                           : EncoderAS5600::Radians);
   pkt.targetAngle = axis.targetAngleRad() * (useDeg ? RAD_TO_DEG : 1.0);
   pkt.temperature = sensors.temperatureC();
-  pkt.minTriggered = homing.maxTriggered();
+  pkt.minTriggered = homing.minTriggered();
   pkt.maxTriggered = homing.maxTriggered();
   pkt.config = toWire(cfg);
 
@@ -404,6 +418,7 @@ void setup()
   {
     cfgStore.save(cfg);
   }
+  cfg.calibratedOnce = false;
   delay(100);
 
   // CAN
@@ -428,6 +443,7 @@ void setup()
   CanCmdBus::registerHandler(CMD_DO_HOMING, onHoming);
   CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndstop);
   CanCmdBus::registerHandler(CMD_SET_EXT_ENCODER, enableExternalEncoder);
+  CanCmdBus::registerHandler(CMD_SET_DIR_INVERT, onDirInvert);
 
   HomingConfig hcfg{
       static_cast<uint8_t>(PIN_HOM_IN1),

@@ -88,6 +88,8 @@ void StepperControl::stop() {
 }
 
 void StepperControl::setSpeedRPS(double rps) {
+  if(_cfg.dirInvert)
+    rps = -rps;
   const double sps = std::abs(rps) * stepsPerRev();
   setStepRate(sps);
   setDir(rps >= 0.0);

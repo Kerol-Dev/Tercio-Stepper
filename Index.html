@@ -1,0 +1,817 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Tercio Labs – Multi-Motor CAN Control</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b0b0e;
+      --fg: #e5e7eb;
+      --card: #121217;
+      --card2: #0f1117;
+      --border: #262632;
+      --muted: #9ca3af;
+      --accent: #10b981;
+      --accent-2: #60a5fa;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --switch-bg: #1f2937;
+      --switch-on: #10b981;
+      --switch-knob: #fff;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      max-width: 100%;
+      overflow-x: hidden
+    }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 24px
+    }
+
+    h2 {
+      margin: 0 0 8px 0
+    }
+
+    small {
+      color: var(--muted)
+    }
+
+    .app {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 16px
+    }
+
+    @media (max-width:1024px) {
+      .app {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap
+    }
+
+    .btn {
+      background: var(--accent);
+      border: 0;
+      color: #08221a;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600
+    }
+
+    .btn.secondary {
+      background: #1f2937;
+      color: var(--fg)
+    }
+
+    .btn.info {
+      background: var(--accent-2);
+      color: #081422
+    }
+
+    .btn.warn {
+      background: var(--warn);
+      color: #1b1405
+    }
+
+    .btn.danger {
+      background: var(--danger);
+      color: #2b0b0b
+    }
+
+    .btn[disabled] {
+      opacity: .5;
+      cursor: not-allowed
+    }
+
+    input,
+    select {
+      background: #1b1f2a;
+      border: 1px solid #2e3347;
+      color: var(--fg);
+      border-radius: 10px;
+      padding: 9px
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Consolas, Monaco, monospace
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px
+    }
+
+    @media (max-width:1024px) {
+      .split {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .pill {
+      background: #131827;
+      border: 1px solid #22304a;
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px
+    }
+
+    .warnbar {
+      background: #2a1111;
+      border: 1px solid #6b1d1d;
+      color: #ffd2d2;
+      padding: 10px;
+      border-radius: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: center
+    }
+
+    .hidden {
+      display: none
+    }
+
+    .dev-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px
+    }
+
+    .search {
+      display: flex;
+      gap: 8px
+    }
+
+    .dev-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 60vh;
+      overflow: auto
+    }
+
+    .dev-item {
+      border: 1px solid var(--border);
+      background: #0e111a;
+      border-radius: 12px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      cursor: pointer
+    }
+
+    .dev-item.active {
+      outline: 2px solid var(--accent)
+    }
+
+    .dev-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 999px;
+      border: 1px solid #2a3448;
+      background: #121727;
+      color: #b9cdfc
+    }
+
+    .tag.warn {
+      border-color: #6b1d1d;
+      background: #2a1111;
+      color: #ffd2d2
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 10px
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap
+    }
+
+    #log {
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      height: 36vh;
+      overflow: auto;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+      cursor: pointer
+    }
+
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none
+    }
+
+    .switch {
+      width: 46px;
+      height: 26px;
+      background: #1f2937;
+      border: 1px solid #2e3347;
+      border-radius: 999px;
+      position: relative;
+      transition: .2s
+    }
+
+    .knob {
+      width: 22px;
+      height: 22px;
+      background: #fff;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 2px;
+      transform: translateY(-50%);
+      transition: left .2s
+    }
+
+    .toggle input:checked+.switch {
+      background: var(--switch-on);
+      border-color: transparent
+    }
+
+    .toggle input:checked+.switch .knob {
+      left: 22px
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px
+    }
+
+    td,
+    th {
+      font-size: 13px;
+      text-align: left;
+      padding: 8px 10px
+    }
+
+    tr {
+      background: #0e111a;
+      border: 1px solid var(--border)
+    }
+
+    tr td:first-child,
+    tr th:first-child {
+      border-top-left-radius: 10px;
+      border-bottom-left-radius: 10px
+    }
+
+    tr td:last-child,
+    tr th:last-child {
+      border-top-right-radius: 10px;
+      border-bottom-right-radius: 10px
+    }
+
+    /* --- Field spacing fix (strong) --- */
+    label:not(.toggle) {
+      display: block !important;
+      /* stack label text and input */
+      margin: 0 0 16px !important;
+      /* space below each field */
+    }
+
+    label:not(.toggle)>input,
+    label:not(.toggle)>select,
+    label:not(.toggle)>textarea {
+      display: block;
+      /* full-width block control */
+      width: 100%;
+      margin-top: 12px !important;
+      /* space between label text and box */
+    }
+
+    /* more vertical space between items in grids */
+    .grid {
+      row-gap: 20px !important;
+    }
+
+    /* more padding inside boxes */
+    input,
+    select,
+    textarea {
+      padding: 12px 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="card">
+      <div class="dev-header">
+        <div>
+          <h2 style="margin:0">Devices</h2>
+          <small>Auto-discovered from telemetry</small>
+        </div>
+        <div class="toolbar">
+          <button id="btnConnect" class="btn">Connect</button>
+          <select id="selBaud">
+            <option>115200</option>
+            <option>230400</option>
+            <option>460800</option>
+            <option>921600</option>
+          </select>
+        </div>
+      </div>
+      <div class="search">
+        <input id="devSearch" placeholder="Filter by ID/status…" class="mono" style="flex:1">
+        <button id="btnExport" class="btn secondary">Export CSV</button>
+      </div>
+      <div id="devList" class="dev-list" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <div class="row">
+          <h2 style="margin:0">Control</h2>
+          <div id="status" class="pill"><small>Idle</small></div>
+        </div>
+        <div class="row">
+          <div class="pill"><b>Active:</b> <span id="activeId" class="mono">—</span></div>
+          <div class="pill"><b>Units:</b> <span id="activeUnits" class="mono">rad</span></div>
+        </div>
+      </div>
+
+      <div id="calibWarn" class="warnbar hidden"><b>⚠ Not calibrated.</b> Run <i>Do Calibrate</i> on this device.</div>
+
+      <div class="split" style="margin-top:10px">
+        <div class="card">
+          <div class="section-title">
+            <h3 style="margin:0;font-size:16px">Quick Target</h3>
+            <div class="pill"><b>Preview:</b> <span id="preview" class="mono">—</span></div>
+          </div>
+          <div class="grid">
+            <label>Target (<span id="targetUnits">rad</span>)<input type="number" id="inTarget" step="0.001"
+                value="0.50"></label>
+            <label>Speed limit (rps)<input type="number" id="inRps" step="0.01" value="5.0"></label>
+            <label>Accel limit (rps²)<input type="number" id="inRps2" step="0.1" value="25.0"></label>
+            <label>Current (mA)<input type="number" id="inmA" step="1" value="1200"></label>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button id="btnSendTarget" class="btn info gated">Send Target</button>
+            <button id="btnSendLimits" class="btn secondary gated">Send Limits</button>
+            <button id="btnSetCurrent" class="btn secondary gated">Set Current</button>
+            <button id="btnCal" class="btn warn">Do Calibrate</button>
+            <label class="toggle gated"><input id="tglEnable" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>Enable Motor</span></label>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button id="btn0" class="btn secondary gated">0</button>
+            <button id="btn90" class="btn secondary gated">90°/π/2</button>
+            <button id="btn180" class="btn secondary gated">180°/π</button>
+          </div>
+          <div class="hint" style="margin-top:6px">Frames: <span class="mono">ID_LO ID_H CMD LEN PAYLOAD…</span></div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <h3 style="margin:0;font-size:16px">Device Setup</h3>
+          </div>
+          <div class="grid">
+            <label>Change ID<input id="newId" type="number" min="0" max="2047" value="2"></label>
+            <label>Microsteps<input id="ms" type="number" min="1" value="16"></label>
+            <label>Steps/Rev<input id="spr" type="number" min="1" value="200"></label>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button id="btnApplyID" class="btn danger gated">Set ID</button>
+            <button id="btnApplyStepper" class="btn secondary gated">Apply Stepper Params</button>
+          </div>
+
+          <div class="section-title" style="margin-top:12px">
+            <h3 style="margin:0;font-size:16px">Modes & Flags</h3>
+          </div>
+          <div class="toolbar" style="flex-wrap:wrap">
+            <label class="toggle gated"><input id="tglUnitsDeg" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>Use Degrees</span></label>
+            <label class="toggle gated"><input id="tglStealth" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>StealthChop</span></label>
+            <label class="toggle gated"><input id="tglExtEnc" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>External Encoder</span></label>
+            <label class="toggle gated"><input id="tglExtMode" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>External Mode</span></label>
+            <label class="toggle gated"><input id="tglEndstop" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>Endstop</span></label>
+            <label class="toggle gated"><input id="tglEncInvert" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>Encoder Invert</span></label>
+            <label class="toggle gated"><input id="tglDirInvert" type="checkbox"><span class="switch"><span
+                  class="knob"></span></span><span>Direction Invert</span></label>
+          </div>
+
+          <div class="section-title" style="margin-top:12px">
+            <h3 style="margin:0;font-size:16px">PID</h3>
+          </div>
+          <div class="grid">
+            <label>Kp<input id="pidKp" type="number" step="0.001" value="5.0"></label>
+            <label>Ki<input id="pidKi" type="number" step="0.001" value="0.0"></label>
+            <label>Kd<input id="pidKd" type="number" step="0.001" value="0.0"></label>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button id="btnApplyPID" class="btn secondary gated">Apply PID</button>
+          </div>
+
+          <div class="section-title" style="margin-top:12px">
+            <h3 style="margin:0;font-size:16px">Homing</h3>
+          </div>
+          <div class="grid">
+            <label>Offset<input id="homeOffset" type="number" step="0.001" value="0.0"></label>
+            <label>Speed (rps)<input id="homeSpeed" type="number" step="0.01" value="1.0"></label>
+          </div>
+          <div class="toolbar" style="flex-wrap:wrap">
+            <label class="toggle gated"><input id="homeUseMin" type="checkbox" checked><span class="switch"><span
+                  class="knob"></span></span><span>Use MIN trigger</span></label>
+            <label class="toggle gated"><input id="homeActiveLow" type="checkbox" checked><span class="switch"><span
+                  class="knob"></span></span><span>Active Low</span></label>
+            <label class="toggle gated"><input id="homeDirPlus" type="checkbox" checked><span class="switch"><span
+                  class="knob"></span></span><span>Direction (+)</span></label>
+            <button id="btnDoHome" class="btn warn gated">Do Homing</button>
+          </div>
+
+          <div class="section-title" style="margin-top:14px">
+            <h3 style="margin:0;font-size:16px">Bulk ID Tools</h3>
+          </div>
+          <div class="row">
+            <label>Start ID <input id="bulkStart" type="number" min="0" max="2047" value="1"
+                style="width:110px"></label>
+            <button id="btnSequential" class="btn warn">Assign Sequential IDs</button>
+            <button id="btnRefreshList" class="btn secondary">Refresh List</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="section-title">
+          <h3 style="margin:0;font-size:16px">Live Telemetry</h3>
+          <div class="row">
+            <div class="pill"><b>Speed:</b> <span id="tlmSpeed" class="mono">—</span></div>
+            <div class="pill"><b>Angle:</b> <span id="tlmAngle" class="mono">—</span></div>
+            <div class="pill"><b>Temp:</b> <span id="tlmTemp" class="mono">—</span></div>
+            <div class="pill"><b>Min:</b> <span id="tlmMin" class="mono">—</span></div>
+            <div class="pill"><b>Max:</b> <span id="tlmMax" class="mono">—</span></div>
+            <div class="pill"><b>Cal:</b> <span id="tlmCal" class="mono">—</span></div>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Units</th>
+              <th>Speed</th>
+              <th>Angle</th>
+              <th>Temp</th>
+              <th>Min</th>
+              <th>Max</th>
+              <th>Cal</th>
+              <th>Last seen</th>
+            </tr>
+          </thead>
+          <tbody id="tblBodies"></tbody>
+        </table>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="section-title">
+          <h3 style="margin:0;font-size:16px">I/O Log</h3>
+          <div class="toolbar">
+            <button id="btnClear" class="btn secondary">Clear</button>
+            <button id="btnSave" class="btn secondary">Save</button>
+          </div>
+        </div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const $ = id => document.getElementById(id);
+      const clamp11 = n => Math.max(0, Math.min(0x7FF, n | 0));
+      const parseIdDec = s => clamp11(parseInt((s || '0').trim(), 10) || 0);
+      const hex2 = b => b.toString(16).toUpperCase().padStart(2, '0');
+      const bytesHex = u8 => Array.from(u8).map(hex2).join(' ');
+      const u8 = v => new Uint8Array([v & 0xFF]);
+      const u16le = v => new Uint8Array([v & 0xFF, (v >> 8) & 0xFF]);
+      const f32le = f => { const b = new ArrayBuffer(4); new DataView(b).setFloat32(0, Number(f) || 0, true); return new Uint8Array(b); };
+
+      const CMD = {
+        TARGET_ANGLE: 0x01, SET_CURRENT_MA: 0x02, SET_SPEED_LIMIT: 0x03, SET_PID: 0x04, SET_ID: 0x05,
+        SET_MICROSTEPS: 0x06, SET_STEALTHCHOP: 0x07, SET_EXT_MODE: 0x08, SET_UNITS: 0x09, SET_ENC_INVERT: 0x0A,
+        SET_ENABLED: 0x0B, SET_STEPS_PER_REV: 0x0C, DO_CALIBRATE: 0x0D, DO_HOMING: 0x0E, SET_ENDSTOP: 0x0F,
+        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12, TELEMETRY: 0x01
+      };
+      const TELEMETRY_CAN_ID = 0x000;
+      function header(canId, cmd, len) { const id = clamp11(canId); return new Uint8Array([id & 0xFF, (id >> 8) & 0xFF, cmd & 0xFF, len & 0xFF]); }
+
+      const frame = {
+        target: (id, val) => { const p = f32le(val); const h = header(id, CMD.TARGET_ANGLE, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        speed: (id, rps) => { const p = f32le(rps); const h = header(id, CMD.SET_SPEED_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        accel: (id, rps2) => { const p = f32le(rps2); const h = header(id, CMD.SET_ACCEL_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        current: (id, ma) => { const p = u16le(ma); const h = header(id, CMD.SET_CURRENT_MA, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        setId: (id, newId) => { const p = u16le(clamp11(newId)); const h = header(id, CMD.SET_ID, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        microsteps: (id, n) => { const p = u16le(n); const h = header(id, CMD.SET_MICROSTEPS, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        stepsPerRev: (id, n) => { const p = u16le(n); const h = header(id, CMD.SET_STEPS_PER_REV, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        bool1: (id, cmdCode, on) => { const p = u8(on ? 1 : 0); const h = header(id, cmdCode, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        pid: (id, kp, ki, kd) => { const p = new Uint8Array(12); p.set(f32le(kp), 0); p.set(f32le(ki), 4); p.set(f32le(kd), 8); const h = header(id, CMD.SET_PID, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        calibrate: (id) => header(id, CMD.DO_CALIBRATE, 0),
+        homing: (id, { useMINTrigger, offset, activeLow, speed, direction }) => {
+          const p = new Uint8Array(11);
+          p[0] = useMINTrigger ? 1 : 0; p.set(f32le(offset), 1); p[5] = activeLow ? 1 : 0; p.set(f32le(speed), 6); p[10] = direction ? 1 : 0;
+          const h = header(id, CMD.DO_HOMING, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o;
+        }
+      };
+
+      const store = {
+        devices: new Map(),       // id -> {units, speed, angle, temp, min, max, cal, ts}
+        activeId: 1,
+        setActive(id) { if (!this.devices.has(id)) return; this.activeId = id; renderActive(); gate(); },
+        upsert(id, st) { const prev = this.devices.get(id) || {}; this.devices.set(id, { ...prev, ...st }); if (id === this.activeId) renderActive(); renderList(); renderTable(); gate(); },
+        replaceId(oldId, newId) { if (!this.devices.has(oldId)) return; const st = this.devices.get(oldId); this.devices.delete(oldId); this.devices.set(newId, st); if (this.activeId === oldId) this.activeId = newId; renderList(); renderTable(); renderActive(); gate(); }
+      };
+
+      const devListEl = $('devList'), devSearch = $('devSearch'), tblBodies = $('tblBodies');
+      const statusEl = $('status'), previewEl = $('preview'), calibWarn = $('calibWarn');
+      const activeIdEl = $('activeId'), activeUnitsEl = $('activeUnits'), targetUnitsEl = $('targetUnits');
+      const inTarget = $('inTarget'), inRps = $('inRps'), inRps2 = $('inRps2'), inmA = $('inmA');
+      const tglEnable = $('tglEnable'), btnSendTarget = $('btnSendTarget'), btnSendLimits = $('btnSendLimits'), btnSetCurrent = $('btnSetCurrent'), btnCal = $('btnCal');
+      const tlmSpeed = $('tlmSpeed'), tlmAngle = $('tlmAngle'), tlmTemp = $('tlmTemp'), tlmMin = $('tlmMin'), tlmMax = $('tlmMax'), tlmCal = $('tlmCal');
+      const newIdEl = $('newId'), msEl = $('ms'), sprEl = $('spr');
+      const tglUnitsDeg = $('tglUnitsDeg'), tglStealth = $('tglStealth'), tglExtEnc = $('tglExtEnc'), tglExtMode = $('tglExtMode'), tglEndstop = $('tglEndstop'), tglEncInvert = $('tglEncInvert'), tglDirInvert = $('tglDirInvert');
+      const pidKp = $('pidKp'), pidKi = $('pidKi'), pidKd = $('pidKd'), btnApplyPID = $('btnApplyPID');
+      const homeOffset = $('homeOffset'), homeSpeed = $('homeSpeed'), homeUseMin = $('homeUseMin'), homeActiveLow = $('homeActiveLow'), homeDirPlus = $('homeDirPlus'), btnDoHome = $('btnDoHome');
+      const btnApplyID = $('btnApplyID'), btnApplyStepper = $('btnApplyStepper'), bulkStart = $('bulkStart'), btnSequential = $('btnSequential'), btnRefreshList = $('btnRefreshList');
+      const logEl = $('log');
+
+      function setStatus(txt) { statusEl.innerHTML = `<small>${txt}</small>`; }
+      function logLine(prefix, buf, color) {
+        const time = new Date().toLocaleTimeString();
+        const text = (buf instanceof Uint8Array) ? bytesHex(buf) : String(buf);
+        const div = document.createElement('div');
+        div.innerHTML = `<span style="color:#9ca3af">${time}</span> <b style="color:${color}">${prefix}</b> ${text}`;
+        logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
+      }
+      const logTx = u8arr => logLine('>', u8arr, '#60a5fa'); const logInfo = t => logLine('*', t, '#f59e0b');
+
+      function gate() {
+        const st = store.devices.get(store.activeId);
+        const ok = !!(st && st.cal);
+        document.querySelectorAll('.gated input, .gated select, .gated button, .gated textarea').forEach(el => { el.disabled = !ok; });
+        calibWarn.classList.toggle('hidden', ok);
+      }
+
+      function renderActive() {
+        const st = store.devices.get(store.activeId);
+        activeIdEl.textContent = '0x' + store.activeId.toString(16).toUpperCase() + ' (' + store.activeId + ')';
+        const units = st ? (st.units || 0) : 0;
+        activeUnitsEl.textContent = units === 1 ? 'deg' : 'rad';
+        targetUnitsEl.textContent = units === 1 ? 'deg' : 'rad';
+        $('btn90').textContent = units === 1 ? '90°' : 'π/2';
+        $('btn180').textContent = units === 1 ? '180°' : 'π';
+        tlmSpeed.textContent = st && st.speed != null ? st.speed.toFixed(4) : '—';
+        tlmAngle.textContent = st && st.angle != null ? st.angle.toFixed(4) : '—';
+        tlmTemp.textContent = st && st.temp != null ? st.temp.toFixed(1) : '—';
+        tlmMin.textContent = st && st.min != null ? (st.min ? 'YES' : 'NO') : '—';
+        tlmMax.textContent = st && st.max != null ? (st.max ? 'YES' : 'NO') : '—';
+        tlmCal.textContent = st && st.cal ? 'YES' : 'NO';
+        preview();
+      }
+
+      function renderList() {
+        const q = (devSearch.value || '').trim().toLowerCase();
+        const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        devListEl.innerHTML = '';
+        ids.forEach(id => {
+          const st = store.devices.get(id) || {};
+          const txt = ('' + id) + ' ' + (st.cal ? 'calibrated' : 'not');
+          if (q && !txt.toLowerCase().includes(q)) return;
+          const item = document.createElement('div');
+          item.className = 'dev-item' + (id === store.activeId ? ' active' : '');
+          item.innerHTML = `
+          <div class="mono">0x${id.toString(16).toUpperCase()}</div>
+          <div class="dev-tags">
+            <span class="tag">units: ${st.units === 1 ? 'deg' : 'rad'}</span>
+            <span class="tag">spd: ${st.speed != null ? st.speed.toFixed(2) : '—'}</span>
+            <span class="tag">ang: ${st.angle != null ? st.angle.toFixed(2) : '—'}</span>
+            <span class="tag">T: ${st.temp != null ? st.temp.toFixed(1) : '—'}</span>
+            <span class="tag ${st.cal ? '' : 'warn'}">${st.cal ? 'CAL' : 'UNCAL'}</span>
+          </div>
+          <div class="mono" style="opacity:.7">${st.ts ? new Date(st.ts).toLocaleTimeString() : ''}</div>`;
+          item.onclick = () => { store.setActive(id); document.querySelectorAll('.dev-item').forEach(el => el.classList.remove('active')); item.classList.add('active'); };
+          devListEl.appendChild(item);
+        });
+      }
+
+      function renderTable() {
+        const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        tblBodies.innerHTML = '';
+        ids.forEach(id => {
+          const st = store.devices.get(id) || {};
+          const tr = document.createElement('tr');
+          const td = v => { const el = document.createElement('td'); el.textContent = v; return el; };
+          tr.appendChild(td(id));
+          tr.appendChild(td(st.units === 1 ? 'deg' : 'rad'));
+          tr.appendChild(td(st.speed != null ? st.speed.toFixed(3) : '—'));
+          tr.appendChild(td(st.angle != null ? st.angle.toFixed(3) : '—'));
+          tr.appendChild(td(st.temp != null ? st.temp.toFixed(1) : '—'));
+          tr.appendChild(td(st.min != null ? (st.min ? 'YES' : 'NO') : '—'));
+          tr.appendChild(td(st.max != null ? (st.max ? 'YES' : 'NO') : '—'));
+          tr.appendChild(td(st.cal ? 'YES' : 'NO'));
+          tr.appendChild(td(st.ts ? new Date(st.ts).toLocaleTimeString() : '—'));
+          tblBodies.appendChild(tr);
+        });
+      }
+
+      function preview() {
+        const id = store.activeId;
+        const val = parseFloat(inTarget.value) || 0;
+        const f = frame.target(id, val);
+        previewEl.textContent = bytesHex(f);
+      }
+
+      const AXIS_CFG_SIZE = 36;
+      function parseTelemetryPayload(u8arr) {
+        if (u8arr.length < AXIS_CFG_SIZE + 8) return null;
+        const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength);
+        let o = 0;
+        o += 4; o += 2; o += 2; const units = dv.getUint8(o); o += 1;
+        const flags = dv.getUint8(o); o += 1;
+        o += 2; o += 2; o += 4; o += 4; o += 4; o += 4; o += 4;
+        const canArbId = dv.getUint16(o, true); o += 2;
+        const speed = dv.getFloat32(o, true); o += 4;
+        const angle = dv.getFloat32(o, true); o += 4;
+        let temp = null, min = null, max = null; o += 4;
+        if (u8arr.length >= AXIS_CFG_SIZE + 16) { temp = dv.getFloat32(o, true); o += 4; }
+        if (u8arr.length >= AXIS_CFG_SIZE + 17) { min = dv.getUint8(o) !== 0; o += 1; }
+        if (u8arr.length >= AXIS_CFG_SIZE + 18) { max = dv.getUint8(o) !== 0; }
+        const cal = (flags & 0x40) !== 0;
+        return { id: canArbId, units, speed, angle, temp, min, max, cal };
+      }
+
+      let port = null, reader = null, rxBuf = new Uint8Array(0);
+      $('btnConnect').onclick = async () => {
+        try {
+          if (!('serial' in navigator)) { setStatus('Use Chrome/Edge.'); return; }
+          if (port) { try { reader?.releaseLock(); await port.close(); } catch { } port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return; }
+          // @ts-ignore
+          port = await navigator.serial.requestPort(); await port.open({ baudRate: parseInt($('selBaud').value, 10) });
+          setStatus('Connected'); $('btnConnect').textContent = 'Disconnect'; logInfo('Connected');
+          reader = port.readable.getReader();
+          (async () => { try { for (; ;) { const { value, done } = await reader.read(); if (done) break; if (value && value.length) appendBuf(value); } } catch { } })();
+          // @ts-ignore
+          navigator.serial.addEventListener('disconnect', e => { if (e.port === port) { $('btnConnect').click(); } });
+        } catch (e) { setStatus('Connect failed: ' + (e?.message || e)); }
+      };
+
+      async function sendBytes(u8arr) { if (!port) { setStatus('Not connected'); return; } try { const w = port.writable.getWriter(); await w.write(u8arr); w.releaseLock(); logTx(u8arr); } catch (e) { setStatus('Write failed: ' + (e?.message || e)); } }
+
+      function appendBuf(chunk) {
+        const m = new Uint8Array(rxBuf.length + chunk.length); m.set(rxBuf, 0); m.set(chunk, rxBuf.length); rxBuf = m; processBuf();
+      }
+      function processBuf() {
+        while (rxBuf.length >= 4) {
+          const id = rxBuf[0] | (rxBuf[1] << 8), cmd = rxBuf[2], len = rxBuf[3], total = 4 + len;
+          if (rxBuf.length < total) return;
+          const payload = rxBuf.subarray(4, 4 + len);
+          if (id === TELEMETRY_CAN_ID && cmd === CMD.TELEMETRY) {
+            const p = parseTelemetryPayload(payload);
+            if (p) { store.upsert(p.id, { units: p.units, speed: p.speed, angle: p.angle, temp: p.temp, min: p.min, max: p.max, cal: p.cal, ts: Date.now() }); }
+          }
+          rxBuf = rxBuf.subarray(total);
+        }
+      }
+
+      devSearch.addEventListener('input', renderList);
+      inTarget.addEventListener('input', preview);
+      $('btn0').onclick = () => { inTarget.value = '0'; preview(); };
+      $('btn90').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; inTarget.value = isDeg ? '90' : (Math.PI / 2).toFixed(3); preview(); };
+      $('btn180').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; inTarget.value = isDeg ? '180' : (Math.PI).toFixed(3); preview(); };
+
+      btnSendTarget.onclick = () => { const id = store.activeId; const val = parseFloat(inTarget.value) || 0; sendBytes(frame.target(id, val)); };
+      btnSendLimits.onclick = () => { const id = store.activeId; const rps = parseFloat(inRps.value) || 0; const rps2 = parseFloat(inRps2.value) || 0; sendBytes(frame.speed(id, rps)); sendBytes(frame.accel(id, rps2)); };
+      btnSetCurrent.onclick = () => { const id = store.activeId; const ma = parseInt(inmA.value, 10) || 0; sendBytes(frame.current(id, ma)); };
+      btnCal.onclick = () => { const id = store.activeId; sendBytes(frame.calibrate(id)); };
+      tglEnable.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENABLED, tglEnable.checked)); };
+
+      btnApplyID.onclick = () => { const oldId = store.activeId; const nid = clamp11(parseInt(newIdEl.value, 10) || 0); if (nid === oldId) return; sendBytes(frame.setId(oldId, nid)); store.replaceId(oldId, nid); };
+      btnApplyStepper.onclick = () => { const id = store.activeId; sendBytes(frame.microsteps(id, parseInt(msEl.value, 10) || 16)); sendBytes(frame.stepsPerRev(id, parseInt(sprEl.value, 10) || 200)); };
+
+      tglUnitsDeg.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, tglUnitsDeg.checked)); };
+      tglStealth.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, tglStealth.checked)); };
+      tglExtEnc.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, tglExtEnc.checked)); };
+      tglExtMode.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, tglExtMode.checked)); };
+      tglEndstop.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, tglEndstop.checked)); };
+      tglEncInvert.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, tglEncInvert.checked)); };
+      tglDirInvert.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, tglDirInvert.checked)); };
+
+      btnApplyPID.onclick = () => { const id = store.activeId; sendBytes(frame.pid(id, parseFloat(pidKp.value) || 0, parseFloat(pidKi.value) || 0, parseFloat(pidKd.value) || 0)); };
+
+      btnDoHome.onclick = () => {
+        const id = store.activeId;
+        const params = { useMINTrigger: homeUseMin.checked, offset: parseFloat(homeOffset.value) || 0, activeLow: homeActiveLow.checked, speed: parseFloat(homeSpeed.value) || 0, direction: homeDirPlus.checked };
+        sendBytes(frame.homing(id, params));
+      };
+
+      btnSequential.onclick = async () => {
+        const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        const start = clamp11(parseInt(bulkStart.value, 10) || 1);
+        for (let i = 0; i < ids.length; i++) {
+          const cur = ids[i], target = clamp11(start + i);
+          if (cur === target) continue;
+          await sendBytes(frame.setId(cur, target));
+          store.replaceId(cur, target);
+        }
+        setStatus('Sequential IDs applied');
+      };
+      btnRefreshList.onclick = () => { renderList(); renderTable(); };
+
+      $('btnClear').onclick = () => { logEl.textContent = ''; };
+      $('btnSave').onclick = () => {
+        const lines = Array.from(logEl.children).map(el => el.textContent || '');
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'can_log.txt'; a.click(); URL.revokeObjectURL(url);
+      };
+      $('btnExport').onclick = () => {
+        const rows = [['id', 'units', 'speed', 'angle', 'temp', 'min', 'max', 'cal', 'last_seen']];
+        [...store.devices.keys()].sort((a, b) => a - b).forEach(id => {
+          const s = store.devices.get(id) || {};
+          rows.push([id, s.units === 1 ? 'deg' : 'rad', s.speed ?? '', s.angle ?? '', s.temp ?? '', s.min ?? '', s.max ?? '', s.cal ? '1' : '0', s.ts ? new Date(s.ts).toISOString() : '']);
+        });
+        const csv = rows.map(r => r.map(x => String(x)).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
+      };
+
+      store.upsert(1, { units: 0, cal: false, ts: Date.now() });
+      store.setActive(1);
+      gate();
+    })();
+  </script>
+</body>
+
+</html>

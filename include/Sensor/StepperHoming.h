@@ -3,6 +3,7 @@
 #include <functional>
 #include "Main.h"
 #include <EncoderAS5600.h>
+#include "AxisController.h"
 
 struct HomingConfig {
   uint8_t inMinPin;       // IN1 pin
@@ -25,7 +26,7 @@ public:
   bool begin(const HomingConfig& cfg);
 
   // Perform homing. Returns true if successful.
-  bool home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, SetFn setZero, bool seekToMin);
+  bool home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, AxisController con, AxisConfig axisCfg, SetFn setZero, bool seekToMin);
 
   // Check raw state
   bool minTriggered() const { return _minTrig; }

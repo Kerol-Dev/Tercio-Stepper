@@ -18,7 +18,7 @@ void StepperHoming::update() {
   _maxTrig = readPin(_cfg.inMaxPin, _cfg.maxActiveLow);
 }
 
-bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, SetFn setZero, bool seekToMin) {
+bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, AxisController con, AxisConfig axisCfg, SetFn setZero, bool seekToMin) {
   const uint32_t t0 = millis();
   auto timeout = [&]() { return (millis() - t0) > _cfg.timeoutMs; };
 
@@ -42,18 +42,24 @@ bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, SetFn 
   
   // Back off
   enc.update(0.01); // update once to avoid large jump
-  double start = enc.angle();
-  setVel(-vel);
+  double goal = enc.angle() - _cfg.backoffOffset;
+  double previousSpeed = axisCfg.maxRPS;
+  axisCfg.maxRPS = fabs(vel);
+  con.setTargetAngleRad(goal);
   while (true) {
-    enc.update(0.01);
-    double d = fabsf(enc.angle() - start);
-    if (d >= _cfg.backoffOffset) break;
+    con.update(0.01);
+    double err = fabs(enc.angle() - goal);
+    if(err < 0.1)
+    {
+      break;
+    }
     delay(1);
   }
   stop();
+  axisCfg.maxRPS  = previousSpeed;
 
-  DBG_PRINTLN("Homing: backoff done");
   // Zero encoder
   setZero(0.0f);
+  con.setTargetAngleRad(0);
   return true;
 }

@@ -18,8 +18,8 @@ struct AxisConfig {
   uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 1200;
   float    maxRPS = 15.0f;
-  float    maxRPS2 = 50.0f;
-  float    Kp = 5.0f;
+  float    maxRPS2 = 100.0f;
+  float    Kp = 3.0f;
   float    Ki = 0.0f;
   float    Kd = 0.0f;
   uint16_t canArbId = 0x001;
@@ -50,7 +50,7 @@ inline AxisConfigWire toWire(const AxisConfig& cfg) {
   w.stepsPerRev = cfg.stepsPerRev;
   w.units        = cfg.units;
   w.flags        = (cfg.encInvert?1:0) | (cfg.dirInvert?2:0) |
-                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.enableEndStop?16:0) | (cfg.externalEncoder?32:0);
+                   (cfg.stealthChop?4:0) | (cfg.externalMode?8:0) | (cfg.enableEndStop?16:0) | (cfg.externalEncoder?32:0) | (cfg.calibratedOnce?64:0);
   w.encZeroCounts= cfg.encZeroCounts;
   w.driver_mA    = cfg.driver_mA;
   w.maxRPS       = cfg.maxRPS;

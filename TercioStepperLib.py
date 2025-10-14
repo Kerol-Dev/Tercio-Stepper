@@ -12,7 +12,6 @@ from serial.tools import list_ports
 
 MAX_PAYLOAD = 64
 
-
 class Cmd(IntEnum):
     TARGET_ANGLE       = 0x01
     SET_CURRENT_MA     = 0x02
@@ -23,32 +22,33 @@ class Cmd(IntEnum):
     SET_STEALTHCHOP    = 0x07
     SET_EXT_MODE       = 0x08
     SET_UNITS          = 0x09
-    SET_EXT_ENCODER    = 0x10
-    SET_ACCEL_LIMIT    = 0x11
     SET_ENC_INVERT     = 0x0A
     SET_ENABLED        = 0x0B
     SET_STEPS_PER_REV  = 0x0C
     DO_CALIBRATE       = 0x0D
     DO_HOMING          = 0x0E
     SET_ENDSTOP        = 0x0F
+    SET_EXT_ENCODER    = 0x10
+    SET_ACCEL_LIMIT    = 0x11
+    SET_DIR_INVERT     = 0x12
 
 TELEMETRY_CAN_ID: int = 0x000
 TELEMETRY_CMD: int = 0x01
 
+# Header: <can_id:uint16, cmd:uint8, len:uint8>
 HDR_FMT = "<HBB"
 HDR_SIZE = struct.calcsize(HDR_FMT)
 
+# Axis config (wire) layout
 AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f f H"
 AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
 
-DATAPACKET_FMT  = "<I H H B B H H f f f f f H f f f f"
-DATAPACKET_SIZE = struct.calcsize(DATAPACKET_FMT)
+# Telemetry tail after config: currentSpeed, currentAngle, targetAngle, temperature, minTrig, maxTrig
+TELEM_TAIL_FMT  = "<f f f f B B"
+TELEM_TAIL_SIZE = struct.calcsize(TELEM_TAIL_FMT)
 
-HOMING_WIRE_FMT  = "<B f B f B"
-HOMING_WIRE_SIZE = struct.calcsize(HOMING_WIRE_FMT)
-
-def _pack_u8(v: int)  -> bytes: return struct.pack("<B", v & 0xFF)
-def _pack_u16(v: int) -> bytes: return struct.pack("<H", v & 0xFFFF)
+def _pack_u8(v: int)    -> bytes: return struct.pack("<B", v & 0xFF)
+def _pack_u16(v: int)   -> bytes: return struct.pack("<H", v & 0xFFFF)
 def _pack_f32(v: float) -> bytes: return struct.pack("<f", float(v))
 def _pack_bool01(b: bool) -> bytes: return struct.pack("<B", 1 if b else 0)
 
@@ -69,6 +69,8 @@ class HomingParams:
     speed: float = 1.0
     direction: bool = True
 
+HOMING_WIRE_FMT  = "<B f B f B"
+HOMING_WIRE_SIZE = struct.calcsize(HOMING_WIRE_FMT)
 
 def _pack_homing(p: HomingParams) -> bytes:
     return struct.pack(
@@ -80,7 +82,6 @@ def _pack_homing(p: HomingParams) -> bytes:
         1 if p.direction else 0,
     )
 
-
 @dataclass
 class AxisFlags:
     encInvert: bool
@@ -89,6 +90,7 @@ class AxisFlags:
     externalMode: bool
     enableEndstop : bool
     externalEncoder : bool
+    calibratedOnce: bool
 
 @dataclass
 class AxisConfig:
@@ -106,7 +108,6 @@ class AxisConfig:
     Kd: float
     canArbId: int
 
-
 @dataclass
 class AxisState:
     config: Optional[AxisConfig] = None
@@ -119,15 +120,16 @@ class AxisState:
     timestamp: float = field(default_factory=time.time)
 
 def _parse_axis_config_wire(b: bytes) -> AxisConfig:
-    (crc32, microsteps, steps_per_rev, units, flags,
+    (crc32, microsteps, steps_per_rev, units, flags_u8,
      enc_zero_counts, driver_mA, maxRPS, maxRPS2, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
     fl = AxisFlags(
-        encInvert=bool(flags & 0x01),
-        dirInvert=bool(flags & 0x02),
-        stealthChop=bool(flags & 0x04),
-        externalMode=bool(flags & 0x08),
-        enableEndstop=bool(flags & 0x10),
-        externalEncoder=bool(flags & 0x20)
+        encInvert=bool(flags_u8 & 0x01),
+        dirInvert=bool(flags_u8 & 0x02),
+        stealthChop=bool(flags_u8 & 0x04),
+        externalMode=bool(flags_u8 & 0x08),
+        enableEndstop=bool(flags_u8 & 0x10),
+        externalEncoder=bool(flags_u8 & 0x20),
+        calibratedOnce=bool(flags_u8 & 0x40),
     )
     return AxisConfig(
         crc32=crc32,
@@ -143,17 +145,23 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         canArbId=canArbId,
     )
 
-
 def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
-    if len(payload) < DATAPACKET_SIZE:
+    if len(payload) < AXIS_CONFIG_WIRE_SIZE + TELEM_TAIL_SIZE:
         return None
-    fields = struct.unpack(DATAPACKET_FMT, payload[:DATAPACKET_SIZE])
-
-    # ---- FIX: first 12 values are AxisConfig, not 13
-    cfg_bytes = struct.pack(AXIS_CONFIG_WIRE_FMT, *fields[:12])
-    cfg = _parse_axis_config_wire(cfg_bytes)
-    currentSpeed, currentAngle, targetAngle, temperature, minTriggered, maxTriggered, = fields[13], fields[14], fields[15], fields[16], fields[17], fields[18]
-    return AxisState(cfg, currentSpeed, currentAngle, targetAngle, temperature, minTriggered, maxTriggered, time.time())
+    cfg = _parse_axis_config_wire(payload[:AXIS_CONFIG_WIRE_SIZE])
+    (currentSpeed, currentAngle, targetAngle, temperature, minTrig, maxTrig) = struct.unpack(
+        TELEM_TAIL_FMT, payload[AXIS_CONFIG_WIRE_SIZE:AXIS_CONFIG_WIRE_SIZE + TELEM_TAIL_SIZE]
+    )
+    return AxisState(
+        config=cfg,
+        currentSpeed=currentSpeed,
+        currentAngle=currentAngle,
+        targetAngle=targetAngle,
+        temperature=temperature,
+        minTriggered=bool(minTrig),
+        maxTriggered=bool(maxTrig),
+        timestamp=time.time(),
+    )
 
 class Bridge:
     def __init__(
@@ -183,19 +191,10 @@ class Bridge:
         manufacturer_substr: Optional[str] = None,
     ) -> str:
         def matches(p) -> bool:
-            if vid is not None and p.vid != vid:
-                return False
-            if pid is not None and p.pid != pid:
-                return False
-            if product_substr and (
-                not p.product or product_substr.lower() not in p.product.lower()
-            ):
-                return False
-            if manufacturer_substr and (
-                not p.manufacturer
-                or manufacturer_substr.lower() not in p.manufacturer.lower()
-            ):
-                return False
+            if vid is not None and p.vid != vid: return False
+            if pid is not None and p.pid != pid: return False
+            if product_substr and (not p.product or product_substr.lower() not in p.product.lower()): return False
+            if manufacturer_substr and (not p.manufacturer or manufacturer_substr.lower() not in p.manufacturer.lower()): return False
             return True
         ports = list(list_ports.comports())
         cands = [p for p in ports if matches(p)]
@@ -204,12 +203,8 @@ class Bridge:
         if len(cands) == 0:
             raise RuntimeError("No USB-serial ports found for CAN bridge.")
         if len(cands) > 1:
-            desc = ", ".join(
-                f"{p.device}({p.vid:04X}:{p.pid:04X} {p.product or ''})" for p in cands
-            )
-            raise RuntimeError(
-                f"Multiple serial ports found; specify one. Candidates: {desc}"
-            )
+            desc = ", ".join(f"{p.device}({p.vid:04X}:{p.pid:04X} {p.product or ''})" for p in cands)
+            raise RuntimeError(f"Multiple serial ports found; specify one. Candidates: {desc}")
         return cands[0].device
 
     def open(self) -> None:
@@ -230,9 +225,7 @@ class Bridge:
         if self._reader and self._reader.is_alive():
             return
         self._stop_evt.clear()
-        self._reader = threading.Thread(
-            target=self._reader_loop, name="can-bridge-reader", daemon=True
-        )
+        self._reader = threading.Thread(target=self._reader_loop, name="can-bridge-reader", daemon=True)
         self._reader.start()
 
     def stop_reader(self) -> None:
@@ -283,6 +276,7 @@ class Bridge:
             except Exception:
                 pass
 
+    # ---------- Commands ----------
     def set_target_angle(self, can_id: int, angle: float) -> None:
         self._send(can_id, Cmd.TARGET_ANGLE, _pack_f32(angle))
 
@@ -291,6 +285,9 @@ class Bridge:
 
     def set_speed_limit_rps(self, can_id: int, rps: float) -> None:
         self._send(can_id, Cmd.SET_SPEED_LIMIT, _pack_f32(rps))
+
+    def set_accel_limit_rps2(self, can_id: int, rps2: float) -> None:
+        self._send(can_id, Cmd.SET_ACCEL_LIMIT, _pack_f32(rps2))
 
     def set_pid(self, can_id: int, kp: float, ki: float, kd: float) -> None:
         self._send(can_id, Cmd.SET_PID, _pack_f32(kp) + _pack_f32(ki) + _pack_f32(kd))
@@ -334,6 +331,7 @@ class Bridge:
     def do_homing(self, can_id: int, params: HomingParams) -> None:
         self._send(can_id, Cmd.DO_HOMING, _pack_homing(params))
 
+    # ---------- State getters ----------
     def _wait_state(self, can_id: int, timeout_s: Optional[float]) -> Optional[AxisState]:
         deadline = None if timeout_s is None else (time.time() + timeout_s)
         with self._lock:
@@ -350,26 +348,24 @@ class Bridge:
                 else:
                     self._cond.wait()
 
-    def get_current_angle(
-        self, can_id: int, timeout_s: Optional[float] = None
-    ) -> Optional[float]:
+    def get_axis_state(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[AxisState]:
+        return self._wait_state(can_id, timeout_s)
+
+    def get_current_angle(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
         st = self._wait_state(can_id, timeout_s)
         return None if st is None else st.currentAngle
 
-    def get_target_angle(
-        self, can_id: int, timeout_s: Optional[float] = None
-    ) -> Optional[float]:
+    def get_target_angle(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
         st = self._wait_state(can_id, timeout_s)
         return None if st is None else st.targetAngle
 
-    def get_current_speed(
-        self, can_id: int, timeout_s: Optional[float] = None
-    ) -> Optional[float]:
+    def get_current_speed(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
         st = self._wait_state(can_id, timeout_s)
         return None if st is None else st.currentSpeed
 
-    def get_axis_state(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[AxisState]:
-        return self._wait_state(can_id, timeout_s)
+    def get_current_temp(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
+        st = self._wait_state(can_id, timeout_s)
+        return None if st is None else st.temperature
 
 class Stepper:
     def __init__(self, bridge: Bridge, can_id: int):
@@ -444,6 +440,6 @@ class Stepper:
 
     def get_current_speed(self, timeout_s: Optional[float] = None) -> Optional[float]:
         return self.bridge.get_current_speed(self.can_id, timeout_s)
-    
+
     def get_current_temp(self, timeout_s: Optional[float] = None) -> Optional[float]:
         return self.bridge.get_current_temp(self.can_id, timeout_s)

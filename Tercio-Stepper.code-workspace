@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"name": "Tercio-Stepper",
+			"path": "."
+		},
+		{
+			"name": "Tercio-fdcan",
+			"path": "../Tercio-fdcan"
+		},
+		{
+			"name": "Tercio-x1",
+			"path": "../../PlatformIO/Projects/Tercio-x1"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"compare": "cpp",
+			"cmath": "cpp"
+		}
+	}
+}

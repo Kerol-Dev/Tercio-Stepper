@@ -34,6 +34,7 @@ bool Calibrate_EncoderDirection(EncoderAS5600& enc,
                                 double test_rps,
                                 uint32_t jog_ms)
 {
+  cfg.calibratedOnce = true;
   // Ensure known state
   enc.setInvert(false);
   stepgen.enable();
@@ -55,7 +56,6 @@ bool Calibrate_EncoderDirection(EncoderAS5600& enc,
   // Return to start vicinity and zero
   jog(stepgen, enc, -test_rps, jog_ms);
   enc.calibrateZero();
-  cfg.calibratedOnce = true;
 
   return true;
 }
