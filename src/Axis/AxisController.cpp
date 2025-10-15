@@ -1,6 +1,4 @@
 #include "AxisController.h"
-#include "Main.h"
-
 #include <algorithm>
 #include <cmath>
 
@@ -152,8 +150,6 @@ void AxisController::update(double dt)
     {
       const int sgn = (_ext.dir >= 0) ? (digitalRead(_ext.dir) ? +1 : -1) : +1;
       _targetRad += static_cast<double>(pulses * sgn) * _ustepAngleRad;
-      DBG_PRINTF("[EXT] pulses=%ld dir=%d newTarget=%.4f rad\n",
-                 (long)pulses, sgn, _targetRad);
     }
     if (_ext.en >= 0)
     {

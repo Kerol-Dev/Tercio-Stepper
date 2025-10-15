@@ -1,5 +1,4 @@
 #include "StepperHoming.h"
-#include "Main.h"
 
 bool StepperHoming::begin(const HomingConfig& cfg) {
   _cfg = cfg;

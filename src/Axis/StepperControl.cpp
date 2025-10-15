@@ -1,6 +1,5 @@
 #include "StepperControl.h"
 #include <HardwareTimer.h>
-#include <Main.h>
 #include <algorithm>
 
 // ----------------------------------------------------------------------------

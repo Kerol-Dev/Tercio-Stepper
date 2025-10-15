@@ -15,7 +15,6 @@
 #include <ACANFD_STM32_Settings.h>
 #include "CanCmdBus.h"
 #include "StepperHoming.h"
-#include "Main.h"
 
 // -----------------------------------------------------------------------------
 // Commands
@@ -133,12 +132,12 @@ static void onCurrentMA(const CanCmdBus::CmdFrame &f)
 
 static void onHoming(const CanCmdBus::CmdFrame &f)
 {
+  if (!cfg.calibratedOnce)
+    return;
   stepgen.enable();
 
   if (f.len != sizeof(HomingWire))
   {
-    DBG_PRINTF("[HOM] Bad payload len=%u (expected %u)\r\n",
-               unsigned(f.len), unsigned(sizeof(HomingWire)));
     return;
   }
 
@@ -295,7 +294,7 @@ static void onEnabled(const CanCmdBus::CmdFrame &f)
 static void onCalibrate(const CanCmdBus::CmdFrame &f)
 {
   (void)f;
-  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, Debug, 1.0, 1000);
+  Calibrate_EncoderDirection(encoder, stepgen, axis, cfg, 1.0, 1000);
   cfgStore.save(cfg);
 }
 
@@ -376,8 +375,8 @@ static void sendData()
     float currentAngle;
     float targetAngle;
     float temperature;
-    bool  minTriggered = false;
-    bool  maxTriggered = false;
+    bool minTriggered = false;
+    bool maxTriggered = false;
   };
 
   DataPacket pkt;
@@ -393,10 +392,7 @@ static void sendData()
   pkt.maxTriggered = homing.maxTriggered();
   pkt.config = toWire(cfg);
 
-  if (!CanCmdBus::sendStruct(0x000, 0x01, pkt))
-  {
-    DBG_PRINTLN("Failed to send CAN message");
-  }
+  CanCmdBus::sendStruct(0x000, 0x01, pkt);
 }
 
 bool overTemperatureProtection()
@@ -409,7 +405,6 @@ bool overTemperatureProtection()
 // -----------------------------------------------------------------------------
 void setup()
 {
-  DBG_INIT(115200);
   EEPROM.begin();
   sensors.begin();
   delay(100);
@@ -418,7 +413,6 @@ void setup()
   {
     cfgStore.save(cfg);
   }
-  cfg.calibratedOnce = false;
   delay(100);
 
   // CAN
@@ -490,7 +484,8 @@ void loop()
   g_dtSec = (now - g_lastMs) * 0.001f;
   g_lastMs = now;
 
-  axis.update(g_dtSec);
+  if (cfg.calibratedOnce)
+    axis.update(g_dtSec);
   sensors.update();
   homing.update();
 

@@ -1,7 +1,6 @@
 #pragma once
 #include <Arduino.h>
 #include <functional>
-#include "Main.h"
 #include <EncoderAS5600.h>
 #include "AxisController.h"
 
