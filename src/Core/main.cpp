@@ -72,7 +72,7 @@ TMC2209Stepper driver(&TMCSerial, R_SENSE, 0b00);
 AxisController axis(encoder, stepgen, driver, cfg);
 
 AxisController::ExtPins extPins{
-    /*step*/ PA1, /*dir*/ PB3, /*en*/ PA0, /*enActiveLow*/ true};
+    /*step*/ PA1, /*dir*/ PA2, /*en*/ PA0, /*enActiveLow*/ true};
 
 static float g_dtSec = 0.f;
 static unsigned long g_lastMs = 0;
@@ -328,6 +328,12 @@ static void onExternalMode(const CanCmdBus::CmdFrame &f)
 
   cfg.externalMode = em;
   axis.setExternalMode(cfg.externalMode);
+
+  if(!cfg.externalMode)
+  {
+    stepgen.enable();
+  }
+
   cfgStore.save(cfg);
 }
 

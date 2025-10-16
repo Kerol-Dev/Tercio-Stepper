@@ -25,7 +25,7 @@ public:
   bool begin(const HomingConfig& cfg);
 
   // Perform homing. Returns true if successful.
-  bool home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, AxisController con, AxisConfig axisCfg, SetFn setZero, bool seekToMin);
+  bool home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, AxisController con, AxisConfig &axisCfg, SetFn setZero, bool seekToMin);
 
   // Check raw state
   bool minTriggered() const { return _minTrig; }

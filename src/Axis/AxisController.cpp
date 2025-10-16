@@ -127,6 +127,10 @@ void AxisController::attachExternal(const ExtPins &p)
   {
     pinMode(_ext.en, INPUT_PULLUP);
   }
+  if (_ext.dir >= 0)
+  {
+    pinMode(_ext.dir, INPUT_PULLDOWN);
+  }
   if (_ext.step >= 0)
   {
     pinMode(_ext.step, INPUT_PULLDOWN);

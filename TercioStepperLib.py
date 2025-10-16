@@ -129,7 +129,7 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         externalMode=bool(flags_u8 & 0x08),
         enableEndstop=bool(flags_u8 & 0x10),
         externalEncoder=bool(flags_u8 & 0x20),
-        calibratedOnce=bool(flags_u8 & 0x40),
+        calibratedOnce=bool(flags_u8 & 0x40)
     )
     return AxisConfig(
         crc32=crc32,
@@ -186,7 +186,7 @@ class Bridge:
     def find_port(
         *,
         vid: Optional[int] = None,
-        pid: Optional[int] = None,
+        pid: Optional[int] = 0x0011,
         product_substr: Optional[str] = None,
         manufacturer_substr: Optional[str] = None,
     ) -> str:
