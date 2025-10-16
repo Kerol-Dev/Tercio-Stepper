@@ -10,9 +10,6 @@ Designed around an **STM32G4 MCU** with **CAN-FD**, **encoder feedback**, and **
 | PCB Layout | 3D Render | Web UI | Real Prototype |
 |-------------|------------|--------|----------------|
 | ![PCB Layout](images/pcb_layout.png) | ![3D Render](images/3d_render.png) | ![Web UI](images/web_ui.png) | ![Real Prototype](images/real_life.jpg) |
-
-> All hardware design files and visuals are included in this repository.
-
 ---
 
 ## 🔍 Overview
@@ -32,9 +29,9 @@ The board integrates **CAN-FD communication**, **encoder input (SPI/I²C)**, and
 - **Communication:** CAN-FD, UART  
 - **Control Inputs:** STEP / DIR / EN (5V tolerant)  
 - **Encoder Support:** I²C / SPI magnetic encoders  
-- **Voltage Range:** 12–24 V  
-- **Compact Size:** 45 × 50 mm  
-- **Finish:** ENIG, 2-layer PCB  
+- **Voltage Range:** 12–30 V  
+- **Compact Size:** 38 × 38 mm  
+- **Finish:** ENIG, 4-layer PCB  
 
 ---
 
