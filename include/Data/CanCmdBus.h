@@ -80,4 +80,4 @@ inline bool readF32(const uint8_t* b, size_t len, size_t off, float& out) {
   return true;
 }
 
-} // namespace CanCmdBus
+}

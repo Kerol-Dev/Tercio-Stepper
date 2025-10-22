@@ -9,8 +9,7 @@
 			"path": "../Tercio-fdcan"
 		},
 		{
-			"name": "Tercio-x1",
-			"path": "../../PlatformIO/Projects/Tercio-x1"
+			"path": "../Tercio-x1"
 		}
 	],
 	"settings": {

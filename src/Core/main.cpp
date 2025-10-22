@@ -149,7 +149,7 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
       static_cast<uint8_t>(PIN_HOM_IN2), // inMaxPin
       (hw.activeLow != 0),               // minActiveLow
       (hw.activeLow != 0),               // maxActiveLow
-      hw.speed,                          // seekSpeed (sign enforced in setVel below)
+      hw.speed,                          // seekSpeed
       30000u,                            // timeoutMs
       hw.offset                          // backoffOffset
   };
@@ -159,7 +159,6 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
   const bool dirPos = (hw.direction != 0);
 
   const bool ok = homing.home(
-      // setVel
       [&](float v)
       {
         if (!dirPos)
@@ -169,7 +168,6 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
       // stop
       [&]()
       { stepgen.stop(); },
-      // encoder
       encoder,
       axis,
       cfg,
@@ -178,7 +176,6 @@ static void onHoming(const CanCmdBus::CmdFrame &f)
       {
         encoder.calibrateZero();
       },
-      // seekToMin
       useMIN);
 }
 
@@ -490,7 +487,7 @@ void loop()
   g_dtSec = (now - g_lastMs) * 0.001f;
   g_lastMs = now;
 
-  if (cfg.calibratedOnce)
+  if (cfg.calibratedOnce && !overTemperatureProtection())
     axis.update(g_dtSec);
   sensors.update();
   homing.update();
@@ -531,8 +528,8 @@ void loop()
     stepgen.stop();
   }
 
-  if ((now % 50) == 0)
-  { // ~20 Hz gate
+  if ((now % 50) == 0) // ~20 Hz gate
+  { 
     sendData();
   }
   CanCmdBus::poll();

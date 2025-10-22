@@ -96,7 +96,6 @@ namespace CanCmdBus
     return true;
   }
 
-  // Adjust if your FW struct sizes differ
   static inline bool cmd_len_bounds(uint8_t cmd, uint8_t &minL, uint8_t &maxL)
   {
     switch (cmd)
@@ -207,7 +206,6 @@ namespace CanCmdBus
       }
       catch (...)
       {
-        // swallow handler exceptions in release builds
       }
 #else
       s_table[idx].fn(cf);
@@ -320,4 +318,4 @@ namespace CanCmdBus
     return send(id, cmd, p, static_cast<uint8_t>(n));
   }
 
-} // namespace CanCmdBus
+}

@@ -80,5 +80,5 @@ private:
   double _ustepAngleRad{(2.0 * PI) / (200.0 * 16.0)};
   double _targetRad{0.0};
   double _cmdRPS{0.0};
-  double _spreadSwitchRPS{5.0};
+  double _spreadSwitchRPS{8.0};
 };

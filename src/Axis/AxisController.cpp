@@ -199,7 +199,7 @@ void AxisController::update(double dt)
                        static_cast<double>(_cfg.maxRPS));
   const bool speed_cap = (new_cmd != _cmdRPS);
 
-  if (fabs(_cmdRPS) <= 0.005)
+  if (fabs(_cmdRPS) <= 0.001)
     _stepgen.setSpeedRPS(0);
   else
     _stepgen.setSpeedRPS(_cmdRPS);

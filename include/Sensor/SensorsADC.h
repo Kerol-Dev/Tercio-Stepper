@@ -22,7 +22,6 @@ public:
   void setLpfAlpha(float a);
   void setVref(float vref);
 
-  // Call at your control rate (e.g., ISR)
   void update();
 
   // Readouts

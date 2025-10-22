@@ -22,15 +22,15 @@ class Cmd(IntEnum):
     SET_STEALTHCHOP    = 0x07
     SET_EXT_MODE       = 0x08
     SET_UNITS          = 0x09
+    SET_EXT_ENCODER    = 0x10
+    SET_ACCEL_LIMIT    = 0x11
+    SET_DIR_INVERT     = 0x12
     SET_ENC_INVERT     = 0x0A
     SET_ENABLED        = 0x0B
     SET_STEPS_PER_REV  = 0x0C
     DO_CALIBRATE       = 0x0D
     DO_HOMING          = 0x0E
     SET_ENDSTOP        = 0x0F
-    SET_EXT_ENCODER    = 0x10
-    SET_ACCEL_LIMIT    = 0x11
-    SET_DIR_INVERT     = 0x12
 
 TELEMETRY_CAN_ID: int = 0x000
 TELEMETRY_CMD: int = 0x01

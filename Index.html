@@ -334,27 +334,21 @@
     /* --- Field spacing fix (strong) --- */
     label:not(.toggle) {
       display: block !important;
-      /* stack label text and input */
       margin: 0 0 16px !important;
-      /* space below each field */
     }
 
     label:not(.toggle)>input,
     label:not(.toggle)>select,
     label:not(.toggle)>textarea {
       display: block;
-      /* full-width block control */
       width: 100%;
       margin-top: 12px !important;
-      /* space between label text and box */
     }
 
-    /* more vertical space between items in grids */
     .grid {
       row-gap: 20px !important;
     }
 
-    /* more padding inside boxes */
     input,
     select,
     textarea {
@@ -564,7 +558,8 @@
         TARGET_ANGLE: 0x01, SET_CURRENT_MA: 0x02, SET_SPEED_LIMIT: 0x03, SET_PID: 0x04, SET_ID: 0x05,
         SET_MICROSTEPS: 0x06, SET_STEALTHCHOP: 0x07, SET_EXT_MODE: 0x08, SET_UNITS: 0x09, SET_ENC_INVERT: 0x0A,
         SET_ENABLED: 0x0B, SET_STEPS_PER_REV: 0x0C, DO_CALIBRATE: 0x0D, DO_HOMING: 0x0E, SET_ENDSTOP: 0x0F,
-        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12, TELEMETRY: 0x01
+        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12, TELEMETRY: 0x01,
+        GET_CONFIG: 0x20 // NEW: config pull
       };
       const TELEMETRY_CAN_ID = 0x000;
       function header(canId, cmd, len) { const id = clamp11(canId); return new Uint8Array([id & 0xFF, (id >> 8) & 0xFF, cmd & 0xFF, len & 0xFF]); }
@@ -584,15 +579,8 @@
           const p = new Uint8Array(11);
           p[0] = useMINTrigger ? 1 : 0; p.set(f32le(offset), 1); p[5] = activeLow ? 1 : 0; p.set(f32le(speed), 6); p[10] = direction ? 1 : 0;
           const h = header(id, CMD.DO_HOMING, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o;
-        }
-      };
-
-      const store = {
-        devices: new Map(),       // id -> {units, speed, angle, temp, min, max, cal, ts}
-        activeId: 1,
-        setActive(id) { if (!this.devices.has(id)) return; this.activeId = id; renderActive(); gate(); },
-        upsert(id, st) { const prev = this.devices.get(id) || {}; this.devices.set(id, { ...prev, ...st }); if (id === this.activeId) renderActive(); renderList(); renderTable(); gate(); },
-        replaceId(oldId, newId) { if (!this.devices.has(oldId)) return; const st = this.devices.get(oldId); this.devices.delete(oldId); this.devices.set(newId, st); if (this.activeId === oldId) this.activeId = newId; renderList(); renderTable(); renderActive(); gate(); }
+        },
+        getConfig: (id) => header(id, CMD.GET_CONFIG, 0) // NEW
       };
 
       const devListEl = $('devList'), devSearch = $('devSearch'), tblBodies = $('tblBodies');
@@ -618,10 +606,42 @@
       }
       const logTx = u8arr => logLine('>', u8arr, '#60a5fa'); const logInfo = t => logLine('*', t, '#f59e0b');
 
+      const store = {
+        devices: new Map(),
+        activeId: 1,
+        requestedCfg: new Set(), // NEW: track which IDs we requested config for
+
+        setActive(id) { if (!this.devices.has(id)) return; this.activeId = id; renderActive(); gate(); },
+        upsert(id, st) {
+          const prev = this.devices.get(id) || {};
+          const wasNew = !this.devices.has(id);
+          this.devices.set(id, { ...prev, ...st });
+          if (id === this.activeId) renderActive();
+          renderList(); renderTable(); gate();
+
+          // Ask config once per device
+          if (!this.requestedCfg.has(id)) {
+            this.requestedCfg.add(id);
+            sendBytes(frame.getConfig(id));
+            logInfo(`Requested config from ID ${id}`);
+          }
+        },
+        replaceId(oldId, newId) {
+          if (!this.devices.has(oldId)) return;
+          const st = this.devices.get(oldId);
+          this.devices.delete(oldId);
+          this.devices.set(newId, st);
+          if (this.activeId === oldId) this.activeId = newId;
+          if (this.requestedCfg.has(oldId)) { this.requestedCfg.delete(oldId); this.requestedCfg.add(newId); }
+          renderList(); renderTable(); renderActive(); gate();
+        }
+      };
+
       function gate() {
         const st = store.devices.get(store.activeId);
         const ok = !!(st && st.cal);
-        document.querySelectorAll('.gated input, .gated select, .gated button, .gated textarea').forEach(el => { el.disabled = !ok; });
+        document.querySelectorAll('.gated input, .gated select, .gated button, .gated textarea')
+          .forEach(el => { el.disabled = !ok; });
         calibWarn.classList.toggle('hidden', ok);
       }
 
@@ -645,6 +665,7 @@
       function renderList() {
         const q = (devSearch.value || '').trim().toLowerCase();
         const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        const devListEl = $('devList');
         devListEl.innerHTML = '';
         ids.forEach(id => {
           const st = store.devices.get(id) || {};
@@ -669,6 +690,7 @@
 
       function renderTable() {
         const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        const tblBodies = $('tblBodies');
         tblBodies.innerHTML = '';
         ids.forEach(id => {
           const st = store.devices.get(id) || {};
@@ -694,7 +716,7 @@
         previewEl.textContent = bytesHex(f);
       }
 
-      const AXIS_CFG_SIZE = 36;
+      const AXIS_CFG_SIZE = 36; // as in your telemetry parser (header area length)
       function parseTelemetryPayload(u8arr) {
         if (u8arr.length < AXIS_CFG_SIZE + 8) return null;
         const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength);
@@ -713,39 +735,137 @@
         return { id: canArbId, units, speed, angle, temp, min, max, cal };
       }
 
+      // NEW: parse config response (GET_CONFIG)
+      function parseConfigPayload(u8arr) {
+        // struct:
+        // uint16 steps_per_rev; uint16 microsteps; uint16 current_mA;
+        // uint8 units; uint8 flags; float kp; float ki; float kd;
+        if (u8arr.length < 2 + 2 + 2 + 1 + 1 + 12) return null;
+        const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength);
+        let o = 0;
+        const stepsPerRev = dv.getUint16(o, true); o += 2;
+        const microsteps = dv.getUint16(o, true); o += 2;
+        const currentmA = dv.getUint16(o, true); o += 2;
+        const units = dv.getUint8(o); o += 1; // 0 = rad, 1 = deg
+        const flags = dv.getUint8(o); o += 1; // bitfield (1 Stealth,2 ExtEnc,4 ExtMode,8 Endstop,16 EncInv,32 DirInv)
+        const kp = dv.getFloat32(o, true); o += 4;
+        const ki = dv.getFloat32(o, true); o += 4;
+        const kd = dv.getFloat32(o, true); o += 4;
+        return { stepsPerRev, microsteps, currentmA, units, flags, kp, ki, kd };
+      }
+
+      // NEW: push parsed config into the UI controls
+      function syncFormFromState(id) {
+        const st = store.devices.get(id);
+        if (!st) return;
+
+        // Units
+        tglUnitsDeg.checked = (st.units === 1);
+
+        // Flags bitfield
+        const fl = st.flags ?? 0;
+        tglStealth.checked = !!(fl & 1);
+        tglExtEnc.checked = !!(fl & 2);
+        tglExtMode.checked = !!(fl & 4);
+        tglEndstop.checked = !!(fl & 8);
+        tglEncInvert.checked = !!(fl & 16);
+        tglDirInvert.checked = !!(fl & 32);
+
+        // Stepper params
+        if (st.microsteps != null) msEl.value = String(st.microsteps);
+        if (st.stepsPerRev != null) sprEl.value = String(st.stepsPerRev);
+
+        // Current
+        if (st.currentmA != null) inmA.value = String(st.currentmA);
+
+        // PID
+        if (st.kp != null) pidKp.value = st.kp.toFixed(3).replace(/\.?0+$/, '');
+        if (st.ki != null) pidKi.value = st.ki.toFixed(3).replace(/\.?0+$/, '');
+        if (st.kd != null) pidKd.value = st.kd.toFixed(3).replace(/\.?0+$/, '');
+
+        // Refresh labels/preview for units
+        renderActive();
+        preview();
+      }
+
       let port = null, reader = null, rxBuf = new Uint8Array(0);
+
       $('btnConnect').onclick = async () => {
         try {
           if (!('serial' in navigator)) { setStatus('Use Chrome/Edge.'); return; }
-          if (port) { try { reader?.releaseLock(); await port.close(); } catch { } port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return; }
+          if (port) {
+            try { reader?.releaseLock(); await port.close(); } catch { }
+            port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return;
+          }
           // @ts-ignore
-          port = await navigator.serial.requestPort(); await port.open({ baudRate: parseInt($('selBaud').value, 10) });
+          port = await navigator.serial.requestPort();
+          await port.open({ baudRate: parseInt($('selBaud').value, 10) });
           setStatus('Connected'); $('btnConnect').textContent = 'Disconnect'; logInfo('Connected');
+
           reader = port.readable.getReader();
           (async () => { try { for (; ;) { const { value, done } = await reader.read(); if (done) break; if (value && value.length) appendBuf(value); } } catch { } })();
+
           // @ts-ignore
           navigator.serial.addEventListener('disconnect', e => { if (e.port === port) { $('btnConnect').click(); } });
-        } catch (e) { setStatus('Connect failed: ' + (e?.message || e)); }
+
+          // Immediately request config of active device (if known)
+          if (store.activeId != null) {
+            sendBytes(frame.getConfig(store.activeId));
+            logInfo(`Requested config from active ID ${store.activeId}`);
+          }
+        } catch (e) {
+          setStatus('Connect failed: ' + (e?.message || e));
+        }
       };
 
-      async function sendBytes(u8arr) { if (!port) { setStatus('Not connected'); return; } try { const w = port.writable.getWriter(); await w.write(u8arr); w.releaseLock(); logTx(u8arr); } catch (e) { setStatus('Write failed: ' + (e?.message || e)); } }
+      async function sendBytes(u8arr) {
+        if (!port) { setStatus('Not connected'); return; }
+        try { const w = port.writable.getWriter(); await w.write(u8arr); w.releaseLock(); logTx(u8arr); }
+        catch (e) { setStatus('Write failed: ' + (e?.message || e)); }
+      }
 
       function appendBuf(chunk) {
-        const m = new Uint8Array(rxBuf.length + chunk.length); m.set(rxBuf, 0); m.set(chunk, rxBuf.length); rxBuf = m; processBuf();
+        const m = new Uint8Array(rxBuf.length + chunk.length);
+        m.set(rxBuf, 0); m.set(chunk, rxBuf.length);
+        rxBuf = m; processBuf();
       }
+
       function processBuf() {
         while (rxBuf.length >= 4) {
           const id = rxBuf[0] | (rxBuf[1] << 8), cmd = rxBuf[2], len = rxBuf[3], total = 4 + len;
           if (rxBuf.length < total) return;
           const payload = rxBuf.subarray(4, 4 + len);
+
           if (id === TELEMETRY_CAN_ID && cmd === CMD.TELEMETRY) {
             const p = parseTelemetryPayload(payload);
-            if (p) { store.upsert(p.id, { units: p.units, speed: p.speed, angle: p.angle, temp: p.temp, min: p.min, max: p.max, cal: p.cal, ts: Date.now() }); }
+            if (p) {
+              store.upsert(p.id, {
+                units: p.units, speed: p.speed, angle: p.angle, temp: p.temp,
+                min: p.min, max: p.max, cal: p.cal, ts: Date.now()
+              });
+            }
+          } else if (id === TELEMETRY_CAN_ID && cmd === CMD.GET_CONFIG) {
+            const cfg = parseConfigPayload(payload);
+            if (cfg && cfg.stepsPerRev > 0) {
+              const devId = store.activeId; // if your payload includes ID, replace this with parsed ID
+              store.upsert(devId, {
+                stepsPerRev: cfg.stepsPerRev,
+                microsteps: cfg.microsteps,
+                currentmA: cfg.currentmA,
+                units: cfg.units,
+                flags: cfg.flags,
+                kp: cfg.kp, ki: cfg.ki, kd: cfg.kd
+              });
+              syncFormFromState(devId);
+              logInfo(`Config applied to ID ${devId}`);
+            }
           }
+
           rxBuf = rxBuf.subarray(total);
         }
       }
 
+      // Wire up UI actions
       devSearch.addEventListener('input', renderList);
       inTarget.addEventListener('input', preview);
       $('btn0').onclick = () => { inTarget.value = '0'; preview(); };
@@ -758,8 +878,19 @@
       btnCal.onclick = () => { const id = store.activeId; sendBytes(frame.calibrate(id)); };
       tglEnable.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENABLED, tglEnable.checked)); };
 
-      btnApplyID.onclick = () => { const oldId = store.activeId; const nid = clamp11(parseInt(newIdEl.value, 10) || 0); if (nid === oldId) return; sendBytes(frame.setId(oldId, nid)); store.replaceId(oldId, nid); };
-      btnApplyStepper.onclick = () => { const id = store.activeId; sendBytes(frame.microsteps(id, parseInt(msEl.value, 10) || 16)); sendBytes(frame.stepsPerRev(id, parseInt(sprEl.value, 10) || 200)); };
+      btnApplyID.onclick = () => {
+        const oldId = store.activeId;
+        const nid = clamp11(parseInt(newIdEl.value, 10) || 0);
+        if (nid === oldId) return;
+        sendBytes(frame.setId(oldId, nid));
+        store.replaceId(oldId, nid);
+      };
+
+      btnApplyStepper.onclick = () => {
+        const id = store.activeId;
+        sendBytes(frame.microsteps(id, parseInt(msEl.value, 10) || 16));
+        sendBytes(frame.stepsPerRev(id, parseInt(sprEl.value, 10) || 200));
+      };
 
       tglUnitsDeg.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, tglUnitsDeg.checked)); };
       tglStealth.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, tglStealth.checked)); };
@@ -769,11 +900,25 @@
       tglEncInvert.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, tglEncInvert.checked)); };
       tglDirInvert.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, tglDirInvert.checked)); };
 
-      btnApplyPID.onclick = () => { const id = store.activeId; sendBytes(frame.pid(id, parseFloat(pidKp.value) || 0, parseFloat(pidKi.value) || 0, parseFloat(pidKd.value) || 0)); };
+      btnApplyPID.onclick = () => {
+        const id = store.activeId;
+        sendBytes(frame.pid(
+          id,
+          parseFloat(pidKp.value) || 0,
+          parseFloat(pidKi.value) || 0,
+          parseFloat(pidKd.value) || 0
+        ));
+      };
 
       btnDoHome.onclick = () => {
         const id = store.activeId;
-        const params = { useMINTrigger: homeUseMin.checked, offset: parseFloat(homeOffset.value) || 0, activeLow: homeActiveLow.checked, speed: parseFloat(homeSpeed.value) || 0, direction: homeDirPlus.checked };
+        const params = {
+          useMINTrigger: homeUseMin.checked,
+          offset: parseFloat(homeOffset.value) || 0,
+          activeLow: homeActiveLow.checked,
+          speed: parseFloat(homeSpeed.value) || 0,
+          direction: homeDirPlus.checked
+        };
         sendBytes(frame.homing(id, params));
       };
 
@@ -804,9 +949,12 @@
           rows.push([id, s.units === 1 ? 'deg' : 'rad', s.speed ?? '', s.angle ?? '', s.temp ?? '', s.min ?? '', s.max ?? '', s.cal ? '1' : '0', s.ts ? new Date(s.ts).toISOString() : '']);
         });
         const csv = rows.map(r => r.map(x => String(x)).join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
       };
 
+      // Seed a placeholder device (so UI is alive pre-telemetry)
       store.upsert(1, { units: 0, cal: false, ts: Date.now() });
       store.setActive(1);
       gate();

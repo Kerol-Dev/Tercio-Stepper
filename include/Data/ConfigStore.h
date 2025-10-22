@@ -17,9 +17,9 @@ struct AxisConfig {
   bool     calibratedOnce = false;
   uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 1200;
-  float    maxRPS = 15.0f;
-  float    maxRPS2 = 100.0f;
-  float    Kp = 3.0f;
+  float    maxRPS = 25.0f;
+  float    maxRPS2 = 200.0f;
+  float    Kp = 5.0f;
   float    Ki = 0.0f;
   float    Kd = 0.0f;
   uint16_t canArbId = 0x001;
