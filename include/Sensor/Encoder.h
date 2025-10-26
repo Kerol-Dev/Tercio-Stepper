@@ -1,20 +1,21 @@
 #pragma once
 #include <Arduino.h>
 #include <AS5600.h>
+#include <AS5048A.h>
 
-class EncoderAS5600 {
+class Encoder {
 public:
   enum Units : uint8_t { Degrees, Radians, Rotations };
 
-  explicit EncoderAS5600(uint16_t cpr = 4096);
+  explicit Encoder(uint16_t cpr = 4096);
 
-  bool  begin(uint8_t sda, uint8_t scl, uint32_t hz = 400000);
+  bool  begin(uint8_t SDA, uint8_t SCL, bool useAS5600, uint8_t as5048_cs);
   void  calibrateZero();
 
   void  setInvert(bool inv);
   void  setVelAlpha(float a);
 
-  void  update(double dt_s); // called regularly with measured dt (seconds)
+  void  update(double dt_s);
 
   double angle(Units u = Radians) const;
   double velocity(Units u = Radians) const;
@@ -29,12 +30,15 @@ public:
 
 private:
   AS5600   _as;
-  const uint16_t _cpr;
+  AS5048A  _as5048a;       // will be constructed with a real CS
+  uint16_t _cpr;
+  bool     _useAS5600;     // <-- not const anymore
+  uint8_t  _as5048_cs{PB2};
 
   uint16_t _lastRaw{0};
-  int32_t  _cont{0};      // continuous counts since last zero
-  double   _velCps{0.0};  // counts per second (LPF)
+  int32_t  _cont{0};
+  double   _velCps{0.0};
 
-  float    _alpha{0.5f};  // velocity LPF coefficient
+  float    _alpha{0.5f};
   bool     _invert{false};
 };

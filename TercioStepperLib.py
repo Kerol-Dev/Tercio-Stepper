@@ -25,6 +25,7 @@ class Cmd(IntEnum):
     SET_EXT_ENCODER    = 0x10
     SET_ACCEL_LIMIT    = 0x11
     SET_DIR_INVERT     = 0x12
+    SET_EXT_SPI        = 0x13
     SET_ENC_INVERT     = 0x0A
     SET_ENABLED        = 0x0B
     SET_STEPS_PER_REV  = 0x0C
@@ -304,6 +305,9 @@ class Bridge:
     def set_external_mode(self, can_id: int, enable: bool) -> None:
         self._send(can_id, Cmd.SET_EXT_MODE, _pack_bool01(enable))
 
+    def set_external_spi(self, can_id: int, enable: bool) -> None:
+        self._send(can_id, Cmd.SET_EXT_SPI, _pack_bool01(enable))
+
     def set_endstop(self, can_id: int, enable: bool) -> None:
         self._send(can_id, Cmd.SET_ENDSTOP, _pack_bool01(enable))
 
@@ -401,6 +405,9 @@ class Stepper:
 
     def set_external_mode(self, enable: bool) -> None:
         self.bridge.set_external_mode(self.can_id, enable)
+
+    def set_external_spi(self, enable: bool) -> None:
+        self.bridge.set_external_spi(self.can_id, enable)
 
     def set_endstop(self, enable: bool) -> None:
         self.bridge.set_endstop(self.can_id, enable)

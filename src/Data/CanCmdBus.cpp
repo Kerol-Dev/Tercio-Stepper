@@ -127,6 +127,18 @@ namespace CanCmdBus
     case 0x09:
       minL = maxL = 1;
       return true; // SET_UNITS (u8)
+    case 0x10:
+      minL = maxL = 1;
+      return true; // SET_EXT_ENCODER (u8)
+    case 0x11:
+      minL = maxL = 4;
+      return true; // SET_ACCEL_LIMIT (f32)
+    case 0x12:
+      minL = maxL = 1;
+      return true; // SET_DIR_INVERT (u8)
+    case 0x13:
+      minL = maxL = 1;
+      return true; // SET_EXT_SPI (u8)
     case 0x0A:
       minL = maxL = 1;
       return true; // SET_ENC_INVERT (u8)
@@ -145,15 +157,6 @@ namespace CanCmdBus
     case 0x0F:
       minL = maxL = 1;
       return true; // SET_ENDSTOP (u8)
-    case 0x10:
-      minL = maxL = 1;
-      return true; // SET_EXT_ENCODER (u8)
-    case 0x11:
-      minL = maxL = 4;
-      return true; // SET_ACCEL_LIMIT (f32)
-    case 0x12:
-      minL = maxL = 1;
-      return true; // SET_DIR_INVERT (u8)
     default:
       return false; // unknown command -> drop
     }

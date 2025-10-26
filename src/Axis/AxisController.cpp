@@ -31,7 +31,7 @@ double SimplePID::compute(double err, double dt)
 // ============================================================================
 AxisController *AxisController::s_owner = nullptr;
 
-AxisController::AxisController(EncoderAS5600 &enc,
+AxisController::AxisController(Encoder &enc,
                                StepperControl &stepgen,
                                TMC2209Stepper &tmc,
                                AxisConfig &cfg)

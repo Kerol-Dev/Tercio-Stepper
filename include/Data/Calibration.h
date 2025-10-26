@@ -1,12 +1,12 @@
 #pragma once
 #include <Arduino.h>
 
-class EncoderAS5600;
+class Encoder;
 class StepperControl;
 class AxisController;
 struct AxisConfig;
 
-bool Calibrate_EncoderDirection(EncoderAS5600& enc,
+bool Calibrate_EncoderDirection(Encoder& enc,
                                 StepperControl& stepgen,
                                 AxisController& axis,
                                 AxisConfig& cfg,

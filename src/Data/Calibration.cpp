@@ -1,5 +1,5 @@
 #include "Calibration.h"
-#include "EncoderAS5600.h"
+#include "Encoder.h"
 #include "StepperControl.h"
 #include "AxisController.h"
 #include "ConfigStore.h"
@@ -7,7 +7,7 @@
 // -----------------------------------------------------------------------------
 // Local helpers
 // -----------------------------------------------------------------------------
-static inline void jog(StepperControl& stepgen, EncoderAS5600& enc, double rps, uint32_t ms)
+static inline void jog(StepperControl& stepgen, Encoder& enc, double rps, uint32_t ms)
 {
   stepgen.setSpeedRPS(rps);
   const uint32_t t0_ms = millis();
@@ -26,7 +26,7 @@ static inline void jog(StepperControl& stepgen, EncoderAS5600& enc, double rps, 
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
-bool Calibrate_EncoderDirection(EncoderAS5600& enc,
+bool Calibrate_EncoderDirection(Encoder& enc,
                                 StepperControl& stepgen,
                                 AxisController& axis,
                                 AxisConfig& cfg,

@@ -17,7 +17,7 @@ void StepperHoming::update() {
   _maxTrig = readPin(_cfg.inMaxPin, _cfg.maxActiveLow);
 }
 
-bool StepperHoming::home(SetVelFn setVel, StopFn stop, EncoderAS5600 enc, AxisController con, AxisConfig &axisCfg, SetFn setZero, bool seekToMin) {
+bool StepperHoming::home(SetVelFn setVel, StopFn stop, Encoder enc, AxisController con, AxisConfig &axisCfg, SetFn setZero, bool seekToMin) {
   const uint32_t t0 = millis();
   auto timeout = [&]() { return (millis() - t0) > _cfg.timeoutMs; };
 

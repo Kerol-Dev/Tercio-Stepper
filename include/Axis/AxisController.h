@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include <TMCStepper.h>
-#include "EncoderAS5600.h"
+#include "Encoder.h"
 #include "ConfigStore.h"
 #include "StepperControl.h"
 
@@ -35,7 +35,7 @@ public:
     double spreadSwitchRPS{8.0};
   };
 
-  AxisController(EncoderAS5600 &enc,
+  AxisController(Encoder &enc,
                  StepperControl &stepgen,
                  TMC2209Stepper &tmc,
                  AxisConfig &cfg);
@@ -65,7 +65,7 @@ public:
 private:
   static void onStepISR();
 
-  EncoderAS5600 &_enc;
+  Encoder &_enc;
   TMC2209Stepper &_tmc;
   AxisConfig &_cfg;
   StepperControl &_stepgen;

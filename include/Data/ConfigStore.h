@@ -14,6 +14,7 @@ struct AxisConfig {
   bool     externalMode = false;
   bool     enableEndStop = false;
   bool     externalEncoder = false;
+  bool     externalSPI = false;
   bool     calibratedOnce = false;
   uint16_t encZeroCounts = 0;
   uint16_t driver_mA = 1200;

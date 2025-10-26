@@ -5,7 +5,7 @@
 #include <AS5600.h>
 #include <TMCStepper.h>
 
-#include "EncoderAS5600.h"
+#include "Encoder.h"
 #include "StepperControl.h"
 #include "AxisController.h"
 #include "ConfigStore.h"
@@ -33,6 +33,7 @@ enum : uint8_t
   CMD_SET_EXT_ENCODER = 0x10,
   CMD_SET_ACCEL_LIMIT = 0x11,
   CMD_SET_DIR_INVERT = 0x12,
+  CMD_SET_EXT_SPI = 0x13,
   CMD_SET_ENC_INVERT = 0x0A,
   CMD_SET_ENABLED = 0x0B,
   CMD_SET_STEPS_PER_REV = 0x0C,
@@ -61,7 +62,7 @@ ConfigStore cfgStore;
 AxisConfig cfg;
 SensorsADC sensors;
 
-EncoderAS5600 encoder;
+Encoder encoder;
 StepperHoming homing;
 StepperControl stepgen(PIN_STEP, PIN_DIR, PIN_EN, cfg);
 
@@ -313,7 +314,19 @@ static void enableExternalEncoder(const CanCmdBus::CmdFrame &f)
 
   cfg.externalEncoder = ex;
   encoder.begin(ex ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
-                ex ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
+                ex ? PIN_EXT_I2C_SCL : PIN_I2C_SCL, !cfg.externalSPI, PB2);
+  cfgStore.save(cfg);
+}
+
+static void enableExternalSPI(const CanCmdBus::CmdFrame &f)
+{
+  bool spi;
+  if (!readBool01(f.payload, f.len, 0, spi))
+    return;
+
+  cfg.externalSPI = spi;
+  encoder.begin(PIN_EXT_I2C_SDA,
+                PIN_EXT_I2C_SCL, !cfg.externalSPI, PB2);
   cfgStore.save(cfg);
 }
 
@@ -385,10 +398,10 @@ static void sendData()
   DataPacket pkt;
   const bool useDeg = (cfg.units == 1);
 
-  pkt.currentSpeed = encoder.velocity(useDeg ? EncoderAS5600::Degrees
-                                             : EncoderAS5600::Radians);
-  pkt.currentAngle = encoder.angle(useDeg ? EncoderAS5600::Degrees
-                                          : EncoderAS5600::Radians);
+  pkt.currentSpeed = encoder.velocity(useDeg ? Encoder::Degrees
+                                             : Encoder::Radians);
+  pkt.currentAngle = encoder.angle(useDeg ? Encoder::Degrees
+                                          : Encoder::Radians);
   pkt.targetAngle = axis.targetAngleRad() * (useDeg ? RAD_TO_DEG : 1.0);
   pkt.temperature = sensors.temperatureC();
   pkt.minTriggered = homing.minTriggered();
@@ -441,6 +454,7 @@ void setup()
   CanCmdBus::registerHandler(CMD_SET_ENDSTOP, enableEndstop);
   CanCmdBus::registerHandler(CMD_SET_EXT_ENCODER, enableExternalEncoder);
   CanCmdBus::registerHandler(CMD_SET_DIR_INVERT, onDirInvert);
+  CanCmdBus::registerHandler(CMD_SET_EXT_SPI, enableExternalSPI);
 
   HomingConfig hcfg{
       static_cast<uint8_t>(PIN_HOM_IN1),
@@ -455,7 +469,7 @@ void setup()
 
   // Encoder
   encoder.begin(cfg.externalEncoder ? PIN_EXT_I2C_SDA : PIN_I2C_SDA,
-                cfg.externalEncoder ? PIN_EXT_I2C_SCL : PIN_I2C_SCL);
+                cfg.externalEncoder ? PIN_EXT_I2C_SCL : PIN_I2C_SCL, !cfg.externalSPI, PB2);
   encoder.setVelAlpha(1);
   encoder.setInvert(cfg.encInvert);
 
