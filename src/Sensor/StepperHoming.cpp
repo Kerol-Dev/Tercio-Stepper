@@ -41,7 +41,7 @@ bool StepperHoming::home(SetVelFn setVel, StopFn stop, Encoder enc, AxisControll
   
   // Back off
   enc.update(0.01); // update once to avoid large jump
-  double goal = enc.angle() - _cfg.backoffOffset;
+  double goal = enc.angle() + _cfg.backoffOffset; // Check if + or - later on!!
   double previousSpeed = axisCfg.maxRPS;
   axisCfg.maxRPS = fabs(vel);
   con.setTargetAngleRad(goal);

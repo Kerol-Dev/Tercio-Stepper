@@ -112,12 +112,13 @@
     }
 
     input,
-    select {
+    select,
+    textarea {
       background: #1b1f2a;
       border: 1px solid #2e3347;
       color: var(--fg);
       border-radius: 10px;
-      padding: 9px
+      padding: 12px 14px
     }
 
     .mono {
@@ -175,7 +176,8 @@
 
     .search {
       display: flex;
-      gap: 8px
+      gap: 8px;
+      flex-wrap: wrap
     }
 
     .dev-list {
@@ -200,6 +202,10 @@
 
     .dev-item.active {
       outline: 2px solid var(--accent)
+    }
+
+    .dev-item:focus {
+      outline: 2px solid var(--accent-2)
     }
 
     .dev-tags {
@@ -331,28 +337,15 @@
       border-bottom-right-radius: 10px
     }
 
-    /* --- Field spacing fix (strong) --- */
     label:not(.toggle) {
       display: block !important;
-      margin: 0 0 16px !important;
+      margin: 0 0 16px !important
     }
 
-    label:not(.toggle)>input,
-    label:not(.toggle)>select,
-    label:not(.toggle)>textarea {
+    label:not(.toggle)>* {
       display: block;
       width: 100%;
-      margin-top: 12px !important;
-    }
-
-    .grid {
-      row-gap: 20px !important;
-    }
-
-    input,
-    select,
-    textarea {
-      padding: 12px 14px;
+      margin-top: 12px !important
     }
   </style>
 </head>
@@ -377,6 +370,7 @@
       </div>
       <div class="search">
         <input id="devSearch" placeholder="Filter by ID/status…" class="mono" style="flex:1">
+        <button id="btnRefreshDevices" class="btn secondary">Refresh Devices</button>
         <button id="btnExport" class="btn secondary">Export CSV</button>
       </div>
       <div id="devList" class="dev-list" style="margin-top:10px"></div>
@@ -413,7 +407,7 @@
             <button id="btnSendTarget" class="btn info gated">Send Target</button>
             <button id="btnSendLimits" class="btn secondary gated">Send Limits</button>
             <button id="btnSetCurrent" class="btn secondary gated">Set Current</button>
-            <button id="btnCal" class="btn warn">Do Calibrate</button>
+            <button id="btnCal" class="btn warn gated">Do Calibrate</button>
             <label class="toggle gated"><input id="tglEnable" type="checkbox"><span class="switch"><span
                   class="knob"></span></span><span>Enable Motor</span></label>
           </div>
@@ -457,7 +451,6 @@
                   class="knob"></span></span><span>Encoder Invert</span></label>
             <label class="toggle gated"><input id="tglDirInvert" type="checkbox"><span class="switch"><span
                   class="knob"></span></span><span>Direction Invert</span></label>
-            <!-- NEW: External SPI Mode toggle -->
             <label class="toggle gated"><input id="tglExtSpi" type="checkbox"><span class="switch"><span
                   class="knob"></span></span><span>External SPI Mode</span></label>
           </div>
@@ -550,7 +543,6 @@
     (() => {
       const $ = id => document.getElementById(id);
       const clamp11 = n => Math.max(0, Math.min(0x7FF, n | 0));
-      const parseIdDec = s => clamp11(parseInt((s || '0').trim(), 10) || 0);
       const hex2 = b => b.toString(16).toUpperCase().padStart(2, '0');
       const bytesHex = u8 => Array.from(u8).map(hex2).join(' ');
       const u8 = v => new Uint8Array([v & 0xFF]);
@@ -561,23 +553,21 @@
         TARGET_ANGLE: 0x01, SET_CURRENT_MA: 0x02, SET_SPEED_LIMIT: 0x03, SET_PID: 0x04, SET_ID: 0x05,
         SET_MICROSTEPS: 0x06, SET_STEALTHCHOP: 0x07, SET_EXT_MODE: 0x08, SET_UNITS: 0x09, SET_ENC_INVERT: 0x0A,
         SET_ENABLED: 0x0B, SET_STEPS_PER_REV: 0x0C, DO_CALIBRATE: 0x0D, DO_HOMING: 0x0E, SET_ENDSTOP: 0x0F,
-        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12,
-        SET_EXT_SPI: 0x13, // NEW: External SPI mode (bool)
-        TELEMETRY: 0x01,
-        GET_CONFIG: 0x20
+        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12, SET_EXT_SPI: 0x13,
+        TELEMETRY: 0x01, GET_CONFIG: 0x20
       };
       const TELEMETRY_CAN_ID = 0x000;
-      function header(canId, cmd, len) { const id = clamp11(canId); return new Uint8Array([id & 0xFF, (id >> 8) & 0xFF, cmd & 0xFF, len & 0xFF]); }
+      const header = (id, cmd, len) => new Uint8Array([id & 0xFF, (id >> 8) & 0xFF, cmd & 0xFF, len & 0xFF]);
 
       const frame = {
         target: (id, val) => { const p = f32le(val); const h = header(id, CMD.TARGET_ANGLE, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         speed: (id, rps) => { const p = f32le(rps); const h = header(id, CMD.SET_SPEED_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        accel: (id, rps2) => { const p = f32le(rps2); const h = header(id, CMD.SET_ACCEL_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        accel: (id, a) => { const p = f32le(a); const h = header(id, CMD.SET_ACCEL_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         current: (id, ma) => { const p = u16le(ma); const h = header(id, CMD.SET_CURRENT_MA, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         setId: (id, newId) => { const p = u16le(clamp11(newId)); const h = header(id, CMD.SET_ID, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         microsteps: (id, n) => { const p = u16le(n); const h = header(id, CMD.SET_MICROSTEPS, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         stepsPerRev: (id, n) => { const p = u16le(n); const h = header(id, CMD.SET_STEPS_PER_REV, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        bool1: (id, cmdCode, on) => { const p = u8(on ? 1 : 0); const h = header(id, cmdCode, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        bool1: (id, cmd, on) => { const p = u8(on ? 1 : 0); const h = header(id, cmd, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         pid: (id, kp, ki, kd) => { const p = new Uint8Array(12); p.set(f32le(kp), 0); p.set(f32le(ki), 4); p.set(f32le(kd), 8); const h = header(id, CMD.SET_PID, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         calibrate: (id) => header(id, CMD.DO_CALIBRATE, 0),
         homing: (id, { useMINTrigger, offset, activeLow, speed, direction }) => {
@@ -589,143 +579,175 @@
       };
 
       const devListEl = $('devList'), devSearch = $('devSearch'), tblBodies = $('tblBodies');
-      const statusEl = $('status'), previewEl = $('preview'), calibWarn = $('calibWarn');
+      const statusEl = $('status'), previewEl = $('preview');
       const activeIdEl = $('activeId'), activeUnitsEl = $('activeUnits'), targetUnitsEl = $('targetUnits');
       const inTarget = $('inTarget'), inRps = $('inRps'), inRps2 = $('inRps2'), inmA = $('inmA');
       const tglEnable = $('tglEnable'), btnSendTarget = $('btnSendTarget'), btnSendLimits = $('btnSendLimits'), btnSetCurrent = $('btnSetCurrent'), btnCal = $('btnCal');
       const tlmSpeed = $('tlmSpeed'), tlmAngle = $('tlmAngle'), tlmTemp = $('tlmTemp'), tlmMin = $('tlmMin'), tlmMax = $('tlmMax'), tlmCal = $('tlmCal');
       const newIdEl = $('newId'), msEl = $('ms'), sprEl = $('spr');
-      const tglUnitsDeg = $('tglUnitsDeg'), tglStealth = $('tglStealth'), tglExtEnc = $('tglExtEnc'), tglExtMode = $('tglExtMode'), tglEndstop = $('tglEndstop'), tglEncInvert = $('tglEncInvert'), tglDirInvert = $('tglDirInvert'), tglExtSpi = $('tglExtSpi'); // NEW
+      const tglUnitsDeg = $('tglUnitsDeg'), tglStealth = $('tglStealth'), tglExtEnc = $('tglExtEnc'), tglExtMode = $('tglExtMode'), tglEndstop = $('tglEndstop'), tglEncInvert = $('tglEncInvert'), tglDirInvert = $('tglDirInvert'), tglExtSpi = $('tglExtSpi');
       const pidKp = $('pidKp'), pidKi = $('pidKi'), pidKd = $('pidKd'), btnApplyPID = $('btnApplyPID');
       const homeOffset = $('homeOffset'), homeSpeed = $('homeSpeed'), homeUseMin = $('homeUseMin'), homeActiveLow = $('homeActiveLow'), homeDirPlus = $('homeDirPlus'), btnDoHome = $('btnDoHome');
       const btnApplyID = $('btnApplyID'), btnApplyStepper = $('btnApplyStepper'), bulkStart = $('bulkStart'), btnSequential = $('btnSequential'), btnRefreshList = $('btnRefreshList');
+      const btnRefreshDevices = $('btnRefreshDevices');
       const logEl = $('log');
 
-      function setStatus(txt) { statusEl.innerHTML = `<small>${txt}</small>`; }
-      function logLine(prefix, buf, color) {
-        const time = new Date().toLocaleTimeString();
-        const text = (buf instanceof Uint8Array) ? bytesHex(buf) : String(buf);
-        const div = document.createElement('div');
-        div.innerHTML = `<span style="color:#9ca3af">${time}</span> <b style="color:${color}">${prefix}</b> ${text}`;
-        logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
-      }
+      const setStatus = txt => statusEl.innerHTML = `<small>${txt}</small>`;
+      const logLine = (p, buf, color) => { const time = new Date().toLocaleTimeString(); const text = (buf instanceof Uint8Array) ? bytesHex(buf) : String(buf); const div = document.createElement('div'); div.innerHTML = `<span style="color:#9ca3af">${time}</span> <b style="color:${color}">${p}</b> ${text}`; logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight; };
       const logTx = u8arr => logLine('>', u8arr, '#60a5fa'); const logInfo = t => logLine('*', t, '#f59e0b');
 
       const store = {
-        devices: new Map(),
-        activeId: 1,
+        devices: new Map(),   // id -> latest state
+        tiles: new Map(),     // id -> {root, fields...}
+        activeId: null,
         requestedCfg: new Set(),
-
-        setActive(id) { if (!this.devices.has(id)) return; this.activeId = id; renderActive(); gate(); },
-        upsert(id, st) {
-          const prev = this.devices.get(id) || {};
-          const wasNew = !this.devices.has(id);
-          this.devices.set(id, { ...prev, ...st });
-          if (id === this.activeId) renderActive();
-          renderList(); renderTable(); gate();
-
-          if (!this.requestedCfg.has(id)) {
-            this.requestedCfg.add(id);
-            sendBytes(frame.getConfig(id));
-            logInfo(`Requested config from ID ${id}`);
-          }
-        },
-        replaceId(oldId, newId) {
-          if (!this.devices.has(oldId)) return;
-          const st = this.devices.get(oldId);
-          this.devices.delete(oldId);
-          this.devices.set(newId, st);
-          if (this.activeId === oldId) this.activeId = newId;
-          if (this.requestedCfg.has(oldId)) { this.requestedCfg.delete(oldId); this.requestedCfg.add(newId); }
-          renderList(); renderTable(); renderActive(); gate();
-        }
+        lastCfgReqId: null,
       };
+
+      function makeTile(id, st) {
+        const root = document.createElement('div');
+        root.className = 'dev-item';
+        root.tabIndex = 0;
+        root.dataset.id = String(id);
+        root.setAttribute('role', 'button');
+        root.setAttribute('aria-selected', 'false');
+        root.innerHTML = `
+          <div class="mono idtxt">0x${id.toString(16).toUpperCase()}</div>
+          <div class="dev-tags">
+            <span class="tag unit">units: ${st.units === 1 ? 'deg' : 'rad'}</span>
+            <span class="tag spd">spd: ${st.speed != null ? st.speed.toFixed(2) : '—'}</span>
+            <span class="tag ang">ang: ${st.angle != null ? st.angle.toFixed(2) : '—'}</span>
+            <span class="tag tmp">T: ${st.temp != null ? st.temp.toFixed(1) : '—'}</span>
+            <span class="tag cal ${st.cal ? '' : 'warn'}">${st.cal ? 'CAL' : 'UNCAL'}</span>
+          </div>
+          <div class="mono ts" style="opacity:.7">${st.ts ? new Date(st.ts).toLocaleTimeString() : ''}</div>
+        `;
+        const focus = () => setActive(id);
+        root.onclick = focus;
+        root.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focus(); } };
+        devListEl.appendChild(root);
+
+        const fields = {
+          root,
+          unit: root.querySelector('.unit'),
+          spd: root.querySelector('.spd'),
+          ang: root.querySelector('.ang'),
+          tmp: root.querySelector('.tmp'),
+          cal: root.querySelector('.cal'),
+          ts: root.querySelector('.ts'),
+          idtxt: root.querySelector('.idtxt'),
+        };
+        store.tiles.set(id, fields);
+        return fields;
+      }
+
+      function updateTile(id, st) {
+        let t = store.tiles.get(id);
+        if (!t) { t = makeTile(id, st); }
+        if (t.unit) t.unit.textContent = 'units: ' + (st.units === 1 ? 'deg' : 'rad');
+        if (t.spd) t.spd.textContent = 'spd: ' + (st.speed != null ? st.speed.toFixed(2) : '—');
+        if (t.ang) t.ang.textContent = 'ang: ' + (st.angle != null ? st.angle.toFixed(2) : '—');
+        if (t.tmp) t.tmp.textContent = 'T: ' + (st.temp != null ? st.temp.toFixed(1) : '—');
+        if (t.cal) {
+          t.cal.textContent = st.cal ? 'CAL' : 'UNCAL';
+          t.cal.classList.toggle('warn', !st.cal);
+        }
+        if (t.ts) t.ts.textContent = st.ts ? new Date(st.ts).toLocaleTimeString() : '';
+        const act = store.activeId === id;
+        t.root.classList.toggle('active', act);
+        t.root.setAttribute('aria-selected', act ? 'true' : 'false');
+      }
+
+      function filterList() {
+        const q = (devSearch.value || '').trim().toLowerCase();
+        for (const [id, t] of store.tiles) {
+          const st = store.devices.get(id) || {};
+          const txt = ('' + id) + ' ' + (st.cal ? 'calibrated' : 'not');
+          const show = !q || txt.toLowerCase().includes(q);
+          t.root.style.display = show ? '' : 'none';
+        }
+      }
+
+      // Only adds/updates tiles for IDs present in store.devices.
+      // Never clears devList or removes existing tiles.
+      function refreshListDevices() {
+        const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        ids.forEach(id => {
+          const st = store.devices.get(id) || {};
+          if (!store.tiles.has(id)) makeTile(id, st);
+          else updateTile(id, st);
+        });
+        filterList();
+      }
+
+      function setActive(id) {
+        if (!store.devices.has(id)) return;
+        store.activeId = id;
+        for (const [tid, t] of store.tiles) {
+          const act = tid === id;
+          t.root.classList.toggle('active', act);
+          t.root.setAttribute('aria-selected', act ? 'true' : 'false');
+        }
+        sendBytes(frame.getConfig(id));
+        store.lastCfgReqId = id;
+        renderActive(); gate(); preview();
+      }
+
+      function renderActive() {
+        const st = store.devices.get(store.activeId);
+        $('activeId').textContent = (store.activeId == null) ? '—' : (`0x${store.activeId.toString(16).toUpperCase()} (${store.activeId})`);
+        const units = st ? (st.units || 0) : 0;
+        $('activeUnits').textContent = units === 1 ? 'deg' : 'rad';
+        $('targetUnits').textContent = units === 1 ? 'deg' : 'rad';
+        $('btn90').textContent = units === 1 ? '90°' : 'π/2';
+        $('btn180').textContent = units === 1 ? '180°' : 'π';
+        $('tlmSpeed').textContent = st && st.speed != null ? st.speed.toFixed(4) : '—';
+        $('tlmAngle').textContent = st && st.angle != null ? st.angle.toFixed(4) : '—';
+        $('tlmTemp').textContent = st && st.temp != null ? st.temp.toFixed(1) : '—';
+        $('tlmMin').textContent = st && st.min != null ? (st.min ? 'YES' : 'NO') : '—';
+        $('tlmMax').textContent = st && st.max != null ? (st.max ? 'YES' : 'NO') : '—';
+        $('tlmCal').textContent = st && st.cal ? 'YES' : 'NO';
+      }
+
+      function renderTable() {
+        const ids = [...store.devices.keys()].sort((a, b) => a - b);
+        $('tblBodies').innerHTML = '';
+        ids.forEach(id => {
+          const s = store.devices.get(id) || {};
+          const tr = document.createElement('tr');
+          const td = v => { const el = document.createElement('td'); el.textContent = v; return el; };
+          tr.appendChild(td(id));
+          tr.appendChild(td(s.units === 1 ? 'deg' : 'rad'));
+          tr.appendChild(td(s.speed != null ? s.speed.toFixed(3) : '—'));
+          tr.appendChild(td(s.angle != null ? s.angle.toFixed(3) : '—'));
+          tr.appendChild(td(s.temp != null ? s.temp.toFixed(1) : '—'));
+          tr.appendChild(td(s.min != null ? (s.min ? 'YES' : 'NO') : '—'));
+          tr.appendChild(td(s.max != null ? (s.max ? 'YES' : 'NO') : '—'));
+          tr.appendChild(td(s.cal ? 'YES' : 'NO'));
+          tr.appendChild(td(s.ts ? new Date(s.ts).toLocaleTimeString() : '—'));
+          $('tblBodies').appendChild(tr);
+        });
+      }
 
       function gate() {
         const st = store.devices.get(store.activeId);
         const ok = !!(st && st.cal);
         document.querySelectorAll('.gated input, .gated select, .gated button, .gated textarea')
           .forEach(el => { el.disabled = !ok; });
-        calibWarn.classList.toggle('hidden', ok);
-      }
-
-      function renderActive() {
-        const st = store.devices.get(store.activeId);
-        activeIdEl.textContent = '0x' + store.activeId.toString(16).toUpperCase() + ' (' + store.activeId + ')';
-        const units = st ? (st.units || 0) : 0;
-        activeUnitsEl.textContent = units === 1 ? 'deg' : 'rad';
-        targetUnitsEl.textContent = units === 1 ? 'deg' : 'rad';
-        $('btn90').textContent = units === 1 ? '90°' : 'π/2';
-        $('btn180').textContent = units === 1 ? '180°' : 'π';
-        tlmSpeed.textContent = st && st.speed != null ? st.speed.toFixed(4) : '—';
-        tlmAngle.textContent = st && st.angle != null ? st.angle.toFixed(4) : '—';
-        tlmTemp.textContent = st && st.temp != null ? st.temp.toFixed(1) : '—';
-        tlmMin.textContent = st && st.min != null ? (st.min ? 'YES' : 'NO') : '—';
-        tlmMax.textContent = st && st.max != null ? (st.max ? 'YES' : 'NO') : '—';
-        tlmCal.textContent = st && st.cal ? 'YES' : 'NO';
-        preview();
-      }
-
-      function renderList() {
-        const q = (devSearch.value || '').trim().toLowerCase();
-        const ids = [...store.devices.keys()].sort((a, b) => a - b);
-        const devListEl = $('devList');
-        devListEl.innerHTML = '';
-        ids.forEach(id => {
-          const st = store.devices.get(id) || {};
-          const txt = ('' + id) + ' ' + (st.cal ? 'calibrated' : 'not');
-          if (q && !txt.toLowerCase().includes(q)) return;
-          const item = document.createElement('div');
-          item.className = 'dev-item' + (id === store.activeId ? ' active' : '');
-          item.innerHTML = `
-          <div class="mono">0x${id.toString(16).toUpperCase()}</div>
-          <div class="dev-tags">
-            <span class="tag">units: ${st.units === 1 ? 'deg' : 'rad'}</span>
-            <span class="tag">spd: ${st.speed != null ? st.speed.toFixed(2) : '—'}</span>
-            <span class="tag">ang: ${st.angle != null ? st.angle.toFixed(2) : '—'}</span>
-            <span class="tag">T: ${st.temp != null ? st.temp.toFixed(1) : '—'}</span>
-            <span class="tag ${st.cal ? '' : 'warn'}">${st.cal ? 'CAL' : 'UNCAL'}</span>
-          </div>
-          <div class="mono" style="opacity:.7">${st.ts ? new Date(st.ts).toLocaleTimeString() : ''}</div>`;
-          item.onclick = () => { store.setActive(id); document.querySelectorAll('.dev-item').forEach(el => el.classList.remove('active')); item.classList.add('active'); };
-          devListEl.appendChild(item);
-        });
-      }
-
-      function renderTable() {
-        const ids = [...store.devices.keys()].sort((a, b) => a - b);
-        const tblBodies = $('tblBodies');
-        tblBodies.innerHTML = '';
-        ids.forEach(id => {
-          const st = store.devices.get(id) || {};
-          const tr = document.createElement('tr');
-          const td = v => { const el = document.createElement('td'); el.textContent = v; return el; };
-          tr.appendChild(td(id));
-          tr.appendChild(td(st.units === 1 ? 'deg' : 'rad'));
-          tr.appendChild(td(st.speed != null ? st.speed.toFixed(3) : '—'));
-          tr.appendChild(td(st.angle != null ? st.angle.toFixed(3) : '—'));
-          tr.appendChild(td(st.temp != null ? st.temp.toFixed(1) : '—'));
-          tr.appendChild(td(st.min != null ? (st.min ? 'YES' : 'NO') : '—'));
-          tr.appendChild(td(st.max != null ? (st.max ? 'YES' : 'NO') : '—'));
-          tr.appendChild(td(st.cal ? 'YES' : 'NO'));
-          tr.appendChild(td(st.ts ? new Date(st.ts).toLocaleTimeString() : '—'));
-          tblBodies.appendChild(tr);
-        });
+        $('calibWarn').classList.toggle('hidden', !(store.activeId && !ok));
       }
 
       function preview() {
-        const id = store.activeId;
-        const val = parseFloat(inTarget.value) || 0;
-        const f = frame.target(id, val);
-        previewEl.textContent = bytesHex(f);
+        if (store.activeId == null) { $('preview').textContent = '—'; return; }
+        const id = store.activeId, val = parseFloat($('inTarget').value) || 0;
+        $('preview').textContent = bytesHex(frame.target(id, val));
       }
 
-      const AXIS_CFG_SIZE = 36; // header area length in telemetry payload (as per your fw)
+      const AXIS_CFG_SIZE = 36;
       function parseTelemetryPayload(u8arr) {
         if (u8arr.length < AXIS_CFG_SIZE + 8) return null;
         const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength);
-        let o = 0;
-        o += 4; o += 2; o += 2; const units = dv.getUint8(o); o += 1;
+        let o = 0; o += 4; o += 2; o += 2; const units = dv.getUint8(o); o += 1;
         const flags = dv.getUint8(o); o += 1;
         o += 2; o += 2; o += 4; o += 4; o += 4; o += 4; o += 4;
         const canArbId = dv.getUint16(o, true); o += 2;
@@ -735,54 +757,22 @@
         if (u8arr.length >= AXIS_CFG_SIZE + 16) { temp = dv.getFloat32(o, true); o += 4; }
         if (u8arr.length >= AXIS_CFG_SIZE + 17) { min = dv.getUint8(o) !== 0; o += 1; }
         if (u8arr.length >= AXIS_CFG_SIZE + 18) { max = dv.getUint8(o) !== 0; }
-        const cal = (flags & 0x40) !== 0; // your fw convention
+        const cal = (flags & 0x40) !== 0;
         return { id: canArbId, units, speed, angle, temp, min, max, cal };
       }
 
       function parseConfigPayload(u8arr) {
-        // struct:
-        // uint16 steps_per_rev; uint16 microsteps; uint16 current_mA;
-        // uint8 units; uint8 flags; float kp; float ki; float kd;
         if (u8arr.length < 2 + 2 + 2 + 1 + 1 + 12) return null;
-        const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength);
-        let o = 0;
+        const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength); let o = 0;
         const stepsPerRev = dv.getUint16(o, true); o += 2;
         const microsteps = dv.getUint16(o, true); o += 2;
         const currentmA = dv.getUint16(o, true); o += 2;
-        const units = dv.getUint8(o); o += 1; // 0 = rad, 1 = deg
-        const flags = dv.getUint8(o); o += 1; // bitfield (1 Stealth,2 ExtEnc,4 ExtMode,8 Endstop,16 EncInv,32 DirInv, [optional: 64 ExtSPI?])
+        const units = dv.getUint8(o); o += 1;
+        const flags = dv.getUint8(o); o += 1;
         const kp = dv.getFloat32(o, true); o += 4;
         const ki = dv.getFloat32(o, true); o += 4;
         const kd = dv.getFloat32(o, true); o += 4;
         return { stepsPerRev, microsteps, currentmA, units, flags, kp, ki, kd };
-      }
-
-      function syncFormFromState(id) {
-        const st = store.devices.get(id);
-        if (!st) return;
-
-        tglUnitsDeg.checked = (st.units === 1);
-
-        const fl = st.flags ?? 0;
-        tglStealth.checked = !!(fl & 1);
-        tglExtEnc.checked = !!(fl & 2);
-        tglExtMode.checked = !!(fl & 4);
-        tglEndstop.checked = !!(fl & 8);
-        tglEncInvert.checked = !!(fl & 16);
-        tglDirInvert.checked = !!(fl & 32);
-        // If firmware encodes External SPI in flags bit 64, uncomment the next line:
-        // tglExtSpi.checked = !!(fl & 64);
-
-        if (st.microsteps != null) msEl.value = String(st.microsteps);
-        if (st.stepsPerRev != null) sprEl.value = String(st.stepsPerRev);
-        if (st.currentmA != null) inmA.value = String(st.currentmA);
-
-        if (st.kp != null) pidKp.value = st.kp.toFixed(3).replace(/\.?0+$/, '');
-        if (st.ki != null) pidKi.value = st.ki.toFixed(3).replace(/\.?0+$/, '');
-        if (st.kd != null) pidKd.value = st.kd.toFixed(3).replace(/\.?0+$/, '');
-
-        renderActive();
-        preview();
       }
 
       let port = null, reader = null, rxBuf = new Uint8Array(0);
@@ -790,28 +780,21 @@
       $('btnConnect').onclick = async () => {
         try {
           if (!('serial' in navigator)) { setStatus('Use Chrome/Edge.'); return; }
-          if (port) {
-            try { reader?.releaseLock(); await port.close(); } catch { }
-            port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return;
-          }
+          if (port) { try { reader?.releaseLock(); await port.close(); } catch { } port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return; }
           // @ts-ignore
           port = await navigator.serial.requestPort();
           await port.open({ baudRate: parseInt($('selBaud').value, 10) });
           setStatus('Connected'); $('btnConnect').textContent = 'Disconnect'; logInfo('Connected');
+
+          // Clear filter (prevents “hidden by search” confusion)
+          $('devSearch').value = ''; filterList();
 
           reader = port.readable.getReader();
           (async () => { try { for (; ;) { const { value, done } = await reader.read(); if (done) break; if (value && value.length) appendBuf(value); } } catch { } })();
 
           // @ts-ignore
           navigator.serial.addEventListener('disconnect', e => { if (e.port === port) { $('btnConnect').click(); } });
-
-          if (store.activeId != null) {
-            sendBytes(frame.getConfig(store.activeId));
-            logInfo(`Requested config from active ID ${store.activeId}`);
-          }
-        } catch (e) {
-          setStatus('Connect failed: ' + (e?.message || e));
-        }
+        } catch (e) { setStatus('Connect failed: ' + (e?.message || e)); }
       };
 
       async function sendBytes(u8arr) {
@@ -821,8 +804,7 @@
       }
 
       function appendBuf(chunk) {
-        const m = new Uint8Array(rxBuf.length + chunk.length);
-        m.set(rxBuf, 0); m.set(chunk, rxBuf.length);
+        const m = new Uint8Array(rxBuf.length + chunk.length); m.set(rxBuf, 0); m.set(chunk, rxBuf.length);
         rxBuf = m; processBuf();
       }
 
@@ -835,107 +817,129 @@
           if (id === TELEMETRY_CAN_ID && cmd === CMD.TELEMETRY) {
             const p = parseTelemetryPayload(payload);
             if (p) {
-              store.upsert(p.id, {
-                units: p.units, speed: p.speed, angle: p.angle, temp: p.temp,
-                min: p.min, max: p.max, cal: p.cal, ts: Date.now()
-              });
+              const prev = store.devices.get(p.id) || {};
+              const st = { ...prev, units: p.units, speed: p.speed, angle: p.angle, temp: p.temp, min: p.min, max: p.max, cal: p.cal, ts: Date.now() };
+              store.devices.set(p.id, st);
+
+              // Per-tick UI updates
+              updateTile(p.id, st);
+              if (store.activeId === null) setActive(p.id);
+              renderActive(); renderTable(); gate();
+              if (!store.requestedCfg.has(p.id)) { store.requestedCfg.add(p.id); sendBytes(frame.getConfig(p.id)); store.lastCfgReqId = p.id; }
             }
           } else if (id === TELEMETRY_CAN_ID && cmd === CMD.GET_CONFIG) {
             const cfg = parseConfigPayload(payload);
-            if (cfg && cfg.stepsPerRev > 0) {
-              const devId = store.activeId; // replace with parsed ID if your payload includes it
-              store.upsert(devId, {
-                stepsPerRev: cfg.stepsPerRev,
-                microsteps: cfg.microsteps,
-                currentmA: cfg.currentmA,
-                units: cfg.units,
-                flags: cfg.flags,
-                kp: cfg.kp, ki: cfg.ki, kd: cfg.kd
-              });
-              syncFormFromState(devId);
-              logInfo(`Config applied to ID ${devId}`);
+            if (cfg) {
+              const devId = store.lastCfgReqId ?? store.activeId;
+              if (devId != null) {
+                const prev = store.devices.get(devId) || {};
+                const st = { ...prev, stepsPerRev: cfg.stepsPerRev, microsteps: cfg.microsteps, currentmA: cfg.currentmA, units: cfg.units, flags: cfg.flags, kp: cfg.kp, ki: cfg.ki, kd: cfg.kd };
+                store.devices.set(devId, st);
+                updateTile(devId, st);
+                if (devId === store.activeId) syncFormFromState(devId);
+                logInfo(`Config applied to ID ${devId}`);
+                renderActive(); gate();
+              }
             }
           }
-
           rxBuf = rxBuf.subarray(total);
         }
       }
 
-      // UI actions
-      devSearch.addEventListener('input', renderList);
+      function syncFormFromState(id) {
+        const st = store.devices.get(id); if (!st) return;
+        $('tglUnitsDeg').checked = (st.units === 1);
+        const fl = st.flags ?? 0;
+        $('tglStealth').checked = !!(fl & 1);
+        $('tglExtEnc').checked = !!(fl & 2);
+        $('tglExtMode').checked = !!(fl & 4);
+        $('tglEndstop').checked = !!(fl & 8);
+        $('tglEncInvert').checked = !!(fl & 16);
+        $('tglDirInvert').checked = !!(fl & 32);
+        if (st.microsteps != null) $('ms').value = String(st.microsteps);
+        if (st.stepsPerRev != null) $('spr').value = String(st.stepsPerRev);
+        if (st.currentmA != null) $('inmA').value = String(st.currentmA);
+        if (st.kp != null) $('pidKp').value = st.kp.toFixed(3).replace(/\.?0+$/, '');
+        if (st.ki != null) $('pidKi').value = st.ki.toFixed(3).replace(/\.?0+$/, '');
+        if (st.kd != null) $('pidKd').value = st.kd.toFixed(3).replace(/\.?0+$/, '');
+      }
+
+      // Buttons / Inputs
+      $('btnRefreshDevices').onclick = () => { refreshListDevices(); };
+      $('btnRefreshList').onclick = () => { refreshListDevices(); };
+      devSearch.addEventListener('input', filterList);
+
       inTarget.addEventListener('input', preview);
-      $('btn0').onclick = () => { inTarget.value = '0'; preview(); };
-      $('btn90').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; inTarget.value = isDeg ? '90' : (Math.PI / 2).toFixed(3); preview(); };
-      $('btn180').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; inTarget.value = isDeg ? '180' : (Math.PI).toFixed(3); preview(); };
+      $('btn0').onclick = () => { $('inTarget').value = '0'; preview(); };
+      $('btn90').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; $('inTarget').value = isDeg ? '90' : (Math.PI / 2).toFixed(3); preview(); };
+      $('btn180').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; $('inTarget').value = isDeg ? '180' : (Math.PI).toFixed(3); preview(); };
 
-      btnSendTarget.onclick = () => { const id = store.activeId; const val = parseFloat(inTarget.value) || 0; sendBytes(frame.target(id, val)); };
-      btnSendLimits.onclick = () => { const id = store.activeId; const rps = parseFloat(inRps.value) || 0; const rps2 = parseFloat(inRps2.value) || 0; sendBytes(frame.speed(id, rps)); sendBytes(frame.accel(id, rps2)); };
-      btnSetCurrent.onclick = () => { const id = store.activeId; const ma = parseInt(inmA.value, 10) || 0; sendBytes(frame.current(id, ma)); };
-      btnCal.onclick = () => { const id = store.activeId; sendBytes(frame.calibrate(id)); };
-      tglEnable.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENABLED, tglEnable.checked)); };
+      $('btnSendTarget').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const val = parseFloat($('inTarget').value) || 0; sendBytes(frame.target(id, val)); };
+      $('btnSendLimits').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const rps = parseFloat($('inRps').value) || 0; const rps2 = parseFloat($('inRps2').value) || 0; sendBytes(frame.speed(id, rps)); sendBytes(frame.accel(id, rps2)); };
+      $('btnSetCurrent').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const ma = parseInt($('inmA').value, 10) || 0; sendBytes(frame.current(id, ma)); };
+      $('btnCal').onclick = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.calibrate(id)); };
+      $('tglEnable').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENABLED, $('tglEnable').checked)); };
 
-      btnApplyID.onclick = () => {
-        const oldId = store.activeId;
-        const nid = clamp11(parseInt(newIdEl.value, 10) || 0);
+      $('btnApplyID').onclick = () => {
+        if (store.activeId == null) return;
+        const oldId = store.activeId; const nid = clamp11(parseInt($('newId').value, 10) || 0);
         if (nid === oldId) return;
         sendBytes(frame.setId(oldId, nid));
-        store.replaceId(oldId, nid);
+        const st = store.devices.get(oldId) || {};
+        store.devices.delete(oldId); store.devices.set(nid, st);
+        const tile = store.tiles.get(oldId);
+        if (tile) { tile.root.dataset.id = String(nid); tile.idtxt.textContent = '0x' + nid.toString(16).toUpperCase(); store.tiles.delete(oldId); store.tiles.set(nid, tile); }
+        setActive(nid);
       };
 
-      btnApplyStepper.onclick = () => {
+      $('btnApplyStepper').onclick = () => {
+        if (store.activeId == null) return;
         const id = store.activeId;
-        sendBytes(frame.microsteps(id, parseInt(msEl.value, 10) || 16));
-        sendBytes(frame.stepsPerRev(id, parseInt(sprEl.value, 10) || 200));
+        sendBytes(frame.microsteps(id, parseInt($('ms').value, 10) || 16));
+        sendBytes(frame.stepsPerRev(id, parseInt($('spr').value, 10) || 200));
       };
 
-      tglUnitsDeg.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, tglUnitsDeg.checked)); };
-      tglStealth.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, tglStealth.checked)); };
-      tglExtEnc.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, tglExtEnc.checked)); };
-      tglExtMode.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, tglExtMode.checked)); };
-      tglEndstop.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, tglEndstop.checked)); };
-      tglEncInvert.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, tglEncInvert.checked)); };
-      tglDirInvert.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, tglDirInvert.checked)); };
-      // NEW: External SPI mode toggle send
-      tglExtSpi.onchange = () => { const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_SPI, tglExtSpi.checked)); };
+      $('tglUnitsDeg').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, $('tglUnitsDeg').checked)); };
+      $('tglStealth').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, $('tglStealth').checked)); };
+      $('tglExtEnc').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, $('tglExtEnc').checked)); };
+      $('tglExtMode').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, $('tglExtMode').checked)); };
+      $('tglEndstop').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, $('tglEndstop').checked)); };
+      $('tglEncInvert').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, $('tglEncInvert').checked)); };
+      $('tglDirInvert').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, $('tglDirInvert').checked)); };
+      $('tglExtSpi').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_SPI, $('tglExtSpi').checked)); };
 
-      btnApplyPID.onclick = () => {
+      $('btnApplyPID').onclick = () => {
+        if (store.activeId == null) return;
         const id = store.activeId;
-        sendBytes(frame.pid(
-          id,
-          parseFloat(pidKp.value) || 0,
-          parseFloat(pidKi.value) || 0,
-          parseFloat(pidKd.value) || 0
-        ));
+        sendBytes(frame.pid(id, parseFloat($('pidKp').value) || 0, parseFloat($('pidKi').value) || 0, parseFloat($('pidKd').value) || 0));
       };
 
-      btnDoHome.onclick = () => {
+      $('btnDoHome').onclick = () => {
+        if (store.activeId == null) return;
         const id = store.activeId;
-        const params = {
-          useMINTrigger: homeUseMin.checked,
-          offset: parseFloat(homeOffset.value) || 0,
-          activeLow: homeActiveLow.checked,
-          speed: parseFloat(homeSpeed.value) || 0,
-          direction: homeDirPlus.checked
-        };
+        const params = { useMINTrigger: $('homeUseMin').checked, offset: parseFloat($('homeOffset').value) || 0, activeLow: $('homeActiveLow').checked, speed: parseFloat($('homeSpeed').value) || 0, direction: $('homeDirPlus').checked };
         sendBytes(frame.homing(id, params));
       };
 
-      btnSequential.onclick = async () => {
+      $('btnSequential').onclick = async () => {
         const ids = [...store.devices.keys()].sort((a, b) => a - b);
-        const start = clamp11(parseInt(bulkStart.value, 10) || 1);
+        const start = clamp11(parseInt($('bulkStart').value, 10) || 1);
         for (let i = 0; i < ids.length; i++) {
           const cur = ids[i], target = clamp11(start + i);
           if (cur === target) continue;
           await sendBytes(frame.setId(cur, target));
-          store.replaceId(cur, target);
+          const st = store.devices.get(cur) || {};
+          store.devices.delete(cur); store.devices.set(target, st);
+          const tile = store.tiles.get(cur);
+          if (tile) { tile.root.dataset.id = String(target); tile.idtxt.textContent = '0x' + target.toString(16).toUpperCase(); store.tiles.delete(cur); store.tiles.set(target, tile); }
         }
+        refreshListDevices();
         setStatus('Sequential IDs applied');
       };
-      btnRefreshList.onclick = () => { renderList(); renderTable(); };
 
-      $('btnClear').onclick = () => { logEl.textContent = ''; };
+      $('btnClear').onclick = () => { $('log').textContent = ''; };
       $('btnSave').onclick = () => {
-        const lines = Array.from(logEl.children).map(el => el.textContent || '');
+        const lines = Array.from($('log').children).map(el => el.textContent || '');
         const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'can_log.txt'; a.click(); URL.revokeObjectURL(url);
@@ -947,15 +951,12 @@
           rows.push([id, s.units === 1 ? 'deg' : 'rad', s.speed ?? '', s.angle ?? '', s.temp ?? '', s.min ?? '', s.max ?? '', s.cal ? '1' : '0', s.ts ? new Date(s.ts).toISOString() : '']);
         });
         const csv = rows.map(r => r.map(x => String(x)).join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
+        const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
       };
 
-      // Seed a placeholder device (so UI is alive pre-telemetry)
-      store.upsert(1, { units: 0, cal: false, ts: Date.now() });
-      store.setActive(1);
-      gate();
+      // Initial paint (no placeholders that could clear later)
+      renderTable(); gate();
     })();
   </script>
 </body>
