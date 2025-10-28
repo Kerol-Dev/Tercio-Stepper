@@ -1,87 +1,51 @@
+# TercioStepperLib.py
 from __future__ import annotations
-
-import struct
-import threading
-import time
+import struct, threading, time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, Optional
-
+from typing import Optional, Dict
 import serial
 from serial.tools import list_ports
 
-MAX_PAYLOAD = 64
+# ========= Protocol (MATCHES HTML UI) =========
+# TX/RX frame: [ID_LO, ID_HI, CMD, LEN, PAYLOAD...]
+HDR_FMT = "<HBB"  # id:uint16, cmd:uint8, len:uint8
+HDR_SIZE = struct.calcsize(HDR_FMT)
+MAX_PAYLOAD = 64  # guard, fw usually < 64
+TELEMETRY_CAN_ID = 0x000
+TELEMETRY_CMD = 0x01
+GET_CONFIG_CMD = 0x20
+
 
 class Cmd(IntEnum):
-    TARGET_ANGLE       = 0x01
-    SET_CURRENT_MA     = 0x02
-    SET_SPEED_LIMIT    = 0x03
-    SET_PID            = 0x04
-    SET_ID             = 0x05
-    SET_MICROSTEPS     = 0x06
-    SET_STEALTHCHOP    = 0x07
-    SET_EXT_MODE       = 0x08
-    SET_UNITS          = 0x09
-    SET_EXT_ENCODER    = 0x10
-    SET_ACCEL_LIMIT    = 0x11
-    SET_DIR_INVERT     = 0x12
-    SET_EXT_SPI        = 0x13
-    SET_ENC_INVERT     = 0x0A
-    SET_ENABLED        = 0x0B
-    SET_STEPS_PER_REV  = 0x0C
-    DO_CALIBRATE       = 0x0D
-    DO_HOMING          = 0x0E
-    SET_ENDSTOP        = 0x0F
+    TARGET_ANGLE = 0x01
+    SET_CURRENT_MA = 0x02
+    SET_SPEED_LIMIT = 0x03
+    SET_PID = 0x04
+    SET_ID = 0x05
+    SET_MICROSTEPS = 0x06
+    SET_STEALTHCHOP = 0x07
+    SET_EXT_MODE = 0x08
+    SET_UNITS = 0x09  # 0=rad, 1=deg
+    SET_ENC_INVERT = 0x0A
+    SET_ENABLED = 0x0B
+    SET_STEPS_PER_REV = 0x0C
+    DO_CALIBRATE = 0x0D
+    DO_HOMING = 0x0E
+    SET_ENDSTOP = 0x0F
+    SET_EXT_ENCODER = 0x10
+    SET_ACCEL_LIMIT = 0x11
+    SET_DIR_INVERT = 0x12
+    SET_EXT_SPI = 0x13
+    GET_CONFIG = 0x20
 
-TELEMETRY_CAN_ID: int = 0x000
-TELEMETRY_CMD: int = 0x01
 
-# Header: <can_id:uint16, cmd:uint8, len:uint8>
-HDR_FMT = "<HBB"
-HDR_SIZE = struct.calcsize(HDR_FMT)
-
-# Axis config (wire) layout
-AXIS_CONFIG_WIRE_FMT  = "<I H H B B H H f f f f f H"
-AXIS_CONFIG_WIRE_SIZE = struct.calcsize(AXIS_CONFIG_WIRE_FMT)
-
-# Telemetry tail after config: currentSpeed, currentAngle, targetAngle, temperature, minTrig, maxTrig
-TELEM_TAIL_FMT  = "<f f f f B B"
+# ========= Wire formats used in telemetry (same as your FW/HTML) =========
+AXIS_CONFIG_FMT = "<I H H B B H H f f f f f H"
+AXIS_CONFIG_SIZE = struct.calcsize(AXIS_CONFIG_FMT)
+TELEM_TAIL_FMT = "<f f f f B B"
 TELEM_TAIL_SIZE = struct.calcsize(TELEM_TAIL_FMT)
 
-def _pack_u8(v: int)    -> bytes: return struct.pack("<B", v & 0xFF)
-def _pack_u16(v: int)   -> bytes: return struct.pack("<H", v & 0xFFFF)
-def _pack_f32(v: float) -> bytes: return struct.pack("<f", float(v))
-def _pack_bool01(b: bool) -> bytes: return struct.pack("<B", 1 if b else 0)
-
-def _make_frame(can_id: int, cmd: int, payload: bytes) -> bytes:
-    if not (0 <= can_id <= 0x7FF):
-        raise ValueError("can_id must be 11-bit (0..0x7FF)")
-    if not (0 <= cmd <= 0xFF):
-        raise ValueError("cmd must be 0..255")
-    if not (0 <= len(payload) <= MAX_PAYLOAD):
-        raise ValueError(f"payload length must be 0..{MAX_PAYLOAD}")
-    return struct.pack(HDR_FMT, can_id, cmd, len(payload)) + payload
-
-@dataclass
-class HomingParams:
-    useMINTrigger: bool = True
-    offset: float = 0.0
-    activeLow: bool = True
-    speed: float = 1.0
-    direction: bool = True
-
-HOMING_WIRE_FMT  = "<B f B f B"
-HOMING_WIRE_SIZE = struct.calcsize(HOMING_WIRE_FMT)
-
-def _pack_homing(p: HomingParams) -> bytes:
-    return struct.pack(
-        HOMING_WIRE_FMT,
-        1 if p.useMINTrigger else 0,
-        float(p.offset),
-        1 if p.activeLow else 0,
-        float(p.speed),
-        1 if p.direction else 0,
-    )
 
 @dataclass
 class AxisFlags:
@@ -89,9 +53,10 @@ class AxisFlags:
     dirInvert: bool
     stealthChop: bool
     externalMode: bool
-    enableEndstop : bool
-    externalEncoder : bool
+    enableEndstop: bool
+    externalEncoder: bool
     calibratedOnce: bool
+
 
 @dataclass
 class AxisConfig:
@@ -109,20 +74,72 @@ class AxisConfig:
     Kd: float
     canArbId: int
 
+
 @dataclass
 class AxisState:
-    config: Optional[AxisConfig] = None
-    currentSpeed: Optional[float] = None
-    currentAngle: Optional[float] = None
-    targetAngle: Optional[float] = None
-    temperature: Optional[float] = None
-    minTriggered: Optional[bool] = None
-    maxTriggered: Optional[bool] = None
+    config: AxisConfig
+    currentSpeed: float
+    currentAngle: float
+    targetAngle: float
+    temperature: float
+    minTriggered: bool
+    maxTriggered: bool
     timestamp: float = field(default_factory=time.time)
 
-def _parse_axis_config_wire(b: bytes) -> AxisConfig:
-    (crc32, microsteps, steps_per_rev, units, flags_u8,
-     enc_zero_counts, driver_mA, maxRPS, maxRPS2, Kp, Ki, Kd, canArbId) = struct.unpack(AXIS_CONFIG_WIRE_FMT, b)
+
+@dataclass
+class HomingParams:
+    useMINTrigger: bool = True
+    offset: float = 0.0
+    activeLow: bool = True
+    speed: float = 1.0
+    direction: bool = True  # True => (+)
+
+
+# ========= pack helpers =========
+_u8 = lambda v: struct.pack("<B", v & 0xFF)
+_u16 = lambda v: struct.pack("<H", v & 0xFFFF)
+_f32 = lambda v: struct.pack("<f", float(v))
+_b01 = lambda b: struct.pack("<B", 1 if b else 0)
+
+
+def _pack_homing(p: HomingParams) -> bytes:
+    # <B f B f B> = 11 bytes (exactly what your FW expects)
+    return struct.pack(
+        "<B f B f B",
+        1 if p.useMINTrigger else 0,
+        float(p.offset),
+        1 if p.activeLow else 0,
+        float(p.speed),
+        1 if p.direction else 0,
+    )
+
+
+def _make_frame(can_id: int, cmd: int, payload: bytes = b"") -> bytes:
+    if not (0 <= can_id <= 0x7FF):
+        raise ValueError("can_id must be 11-bit (0..0x7FF)")
+    if len(payload) > MAX_PAYLOAD:
+        raise ValueError("payload too long")
+    return struct.pack(HDR_FMT, can_id, cmd & 0xFF, len(payload)) + payload
+
+
+# ========= parsing =========
+def _parse_axis_config(b: bytes) -> AxisConfig:
+    (
+        crc32,
+        microsteps,
+        stepsPerRev,
+        units,
+        flags_u8,
+        encZeroCounts,
+        driver_mA,
+        maxRPS,
+        maxRPS2,
+        Kp,
+        Ki,
+        Kd,
+        canArbId,
+    ) = struct.unpack(AXIS_CONFIG_FMT, b[:AXIS_CONFIG_SIZE])
     fl = AxisFlags(
         encInvert=bool(flags_u8 & 0x01),
         dirInvert=bool(flags_u8 & 0x02),
@@ -130,323 +147,273 @@ def _parse_axis_config_wire(b: bytes) -> AxisConfig:
         externalMode=bool(flags_u8 & 0x08),
         enableEndstop=bool(flags_u8 & 0x10),
         externalEncoder=bool(flags_u8 & 0x20),
-        calibratedOnce=bool(flags_u8 & 0x40)
+        calibratedOnce=bool(flags_u8 & 0x40),
     )
     return AxisConfig(
-        crc32=crc32,
-        microsteps=microsteps,
-        stepsPerRev=steps_per_rev,
-        units=units,
-        flags=fl,
-        encZeroCounts=enc_zero_counts,
-        driver_mA=driver_mA,
-        maxRPS=maxRPS,
-        maxRPS2=maxRPS2,
-        Kp=Kp, Ki=Ki, Kd=Kd,
-        canArbId=canArbId,
+        crc32,
+        microsteps,
+        stepsPerRev,
+        units,
+        fl,
+        encZeroCounts,
+        driver_mA,
+        maxRPS,
+        maxRPS2,
+        Kp,
+        Ki,
+        Kd,
+        canArbId,
     )
 
-def _parse_datapacket(payload: bytes) -> Optional[AxisState]:
-    if len(payload) < AXIS_CONFIG_WIRE_SIZE + TELEM_TAIL_SIZE:
+
+def _parse_telemetry(payload: bytes) -> Optional[AxisState]:
+    if len(payload) < AXIS_CONFIG_SIZE + TELEM_TAIL_SIZE:
         return None
-    cfg = _parse_axis_config_wire(payload[:AXIS_CONFIG_WIRE_SIZE])
-    (currentSpeed, currentAngle, targetAngle, temperature, minTrig, maxTrig) = struct.unpack(
-        TELEM_TAIL_FMT, payload[AXIS_CONFIG_WIRE_SIZE:AXIS_CONFIG_WIRE_SIZE + TELEM_TAIL_SIZE]
+    cfg = _parse_axis_config(payload[:AXIS_CONFIG_SIZE])
+    (curSpd, curAng, tgtAng, temp, minT, maxT) = struct.unpack(
+        TELEM_TAIL_FMT, payload[AXIS_CONFIG_SIZE : AXIS_CONFIG_SIZE + TELEM_TAIL_SIZE]
     )
-    return AxisState(
-        config=cfg,
-        currentSpeed=currentSpeed,
-        currentAngle=currentAngle,
-        targetAngle=targetAngle,
-        temperature=temperature,
-        minTriggered=bool(minTrig),
-        maxTriggered=bool(maxTrig),
-        timestamp=time.time(),
-    )
+    return AxisState(cfg, curSpd, curAng, tgtAng, temp, bool(minT), bool(maxT))
 
+
+# ========= Bridge =========
 class Bridge:
-    def __init__(
-        self,
-        port: Optional[str] = None,
-        baudrate: int = 115200,
-        timeout_s: float = 0.05,
-        auto_reader: bool = True,
-    ):
+    def __init__(self, port: Optional[str] = None, baud=115200, timeout=0.05):
         self.port = port
-        self.baudrate = baudrate
-        self.timeout_s = timeout_s
-        self.auto_reader = auto_reader
+        self.baud = baud
+        self.timeout = timeout
         self._ser: Optional[serial.Serial] = None
+        self._rx_buf = bytearray()
+        self._stop = threading.Event()
         self._reader: Optional[threading.Thread] = None
-        self._stop_evt = threading.Event()
         self._state: Dict[int, AxisState] = {}
         self._lock = threading.Lock()
-        self._cond = threading.Condition(self._lock)
 
     @staticmethod
-    def find_port(
-        *,
-        vid: Optional[int] = None,
-        pid: Optional[int] = 0x0011,
-        product_substr: Optional[str] = None,
-        manufacturer_substr: Optional[str] = None,
-    ) -> str:
-        def matches(p) -> bool:
-            if vid is not None and p.vid != vid: return False
-            if pid is not None and p.pid != pid: return False
-            if product_substr and (not p.product or product_substr.lower() not in p.product.lower()): return False
-            if manufacturer_substr and (not p.manufacturer or manufacturer_substr.lower() not in p.manufacturer.lower()): return False
-            return True
+    def find_first_port() -> str:
         ports = list(list_ports.comports())
-        cands = [p for p in ports if matches(p)]
-        if not any([vid, pid, product_substr, manufacturer_substr]):
-            cands = ports
-        if len(cands) == 0:
-            raise RuntimeError("No USB-serial ports found for CAN bridge.")
-        if len(cands) > 1:
-            desc = ", ".join(f"{p.device}({p.vid:04X}:{p.pid:04X} {p.product or ''})" for p in cands)
-            raise RuntimeError(f"Multiple serial ports found; specify one. Candidates: {desc}")
-        return cands[0].device
+        if not ports:
+            raise RuntimeError("No serial ports found.")
+        return ports[0].device
 
-    def open(self) -> None:
-        port = self.port or self.find_port()
-        self._ser = serial.Serial(port, self.baudrate, timeout=self.timeout_s)
-        if self.auto_reader:
-            self.start_reader()
-
-    def close(self) -> None:
-        self.stop_reader()
-        if self._ser is not None:
-            try:
-                self._ser.close()
-            finally:
-                self._ser = None
-
-    def start_reader(self) -> None:
-        if self._reader and self._reader.is_alive():
-            return
-        self._stop_evt.clear()
-        self._reader = threading.Thread(target=self._reader_loop, name="can-bridge-reader", daemon=True)
+    def open(self):
+        if not self.port:
+            self.port = self.find_first_port()
+        self._ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
+        self._stop.clear()
+        self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
 
-    def stop_reader(self) -> None:
-        self._stop_evt.set()
+    def close(self):
+        self._stop.set()
         if self._reader and self._reader.is_alive():
             self._reader.join(timeout=1.5)
+        if self._ser:
+            try:
+                self._ser.close()
+            except:
+                pass
         self._reader = None
+        self._ser = None
 
-    def _send(self, can_id: int, cmd: int | Cmd, payload: bytes = b"") -> None:
+    # ---- writer
+    def send(self, can_id: int, cmd: IntEnum | int, payload: bytes = b""):
         if self._ser is None:
-            raise RuntimeError("serial not open")
+            raise RuntimeError("Bridge not open")
         frame = _make_frame(can_id, int(cmd), payload)
         self._ser.write(frame)
         self._ser.flush()
 
-    def _reader_loop(self) -> None:
-        if self._ser is None:
-            return
+    # ---- reader (same logic as HTML: accumulate -> peel frames)
+    def _reader_loop(self):
         ser = self._ser
-
-        def read_exact(n: int) -> Optional[bytes]:
-            out = bytearray()
-            while len(out) < n and not self._stop_evt.is_set():
-                chunk = ser.read(n - len(out))
+        if not ser:
+            return
+        try:
+            while not self._stop.is_set():
+                chunk = ser.read(256)
                 if not chunk:
                     continue
-                out.extend(chunk)
-            return bytes(out) if len(out) == n else None
+                self._rx_buf.extend(chunk)
+                self._process_buf()
+        except Exception:
+            # swallow and exit thread
+            return
 
-        while not self._stop_evt.is_set():
-            try:
-                hdr = read_exact(HDR_SIZE)
-                if hdr is None:
-                    continue
-                can_id, cmd, length = struct.unpack(HDR_FMT, hdr)
-                if length > MAX_PAYLOAD:
-                    _ = ser.read(length)
-                    continue
-                payload = read_exact(length) or b""
-                if can_id == TELEMETRY_CAN_ID and cmd == TELEMETRY_CMD:
-                    pkt = _parse_datapacket(payload)
-                    if pkt and pkt.config:
-                        with self._lock:
-                            self._state[pkt.config.canArbId] = pkt
-                            self._cond.notify_all()
-            except serial.SerialException:
-                break
-            except Exception:
-                pass
+    def _process_buf(self):
+        # parse as many complete frames as present
+        while True:
+            if len(self._rx_buf) < HDR_SIZE:
+                return
+            can_id, cmd, ln = struct.unpack(HDR_FMT, self._rx_buf[:HDR_SIZE])
+            total = HDR_SIZE + ln
+            if len(self._rx_buf) < total:
+                return
+            payload = bytes(self._rx_buf[HDR_SIZE:total])
+            del self._rx_buf[:total]
 
-    # ---------- Commands ----------
-    def set_target_angle(self, can_id: int, angle: float) -> None:
-        self._send(can_id, Cmd.TARGET_ANGLE, _pack_f32(angle))
+            # telemetry/config broadcasts
+            if can_id == TELEMETRY_CAN_ID and cmd == TELEMETRY_CMD:
+                pkt = _parse_telemetry(payload)
+                if pkt:
+                    with self._lock:
+                        self._state[pkt.config.canArbId] = pkt
+            elif can_id == TELEMETRY_CAN_ID and cmd == GET_CONFIG_CMD:
+                # optional: you can parse GET_CONFIG reply if you send GET_CONFIG
+                # We'll reuse telemetry parser if your FW sends same payload
+                # But the HTML already uses this for form sync, so keep it:
+                if len(payload) >= AXIS_CONFIG_SIZE:
+                    cfg = _parse_axis_config(payload[:AXIS_CONFIG_SIZE])
+                    with self._lock:
+                        st = self._state.get(cfg.canArbId)
+                        if st:
+                            st.config = cfg
+                        else:
+                            # seed with minimal state
+                            self._state[cfg.canArbId] = AxisState(
+                                config=cfg,
+                                currentSpeed=0.0,
+                                currentAngle=0.0,
+                                targetAngle=0.0,
+                                temperature=0.0,
+                                minTriggered=False,
+                                maxTriggered=False,
+                            )
 
-    def set_current_ma(self, can_id: int, ma: int) -> None:
-        self._send(can_id, Cmd.SET_CURRENT_MA, _pack_u16(ma))
-
-    def set_speed_limit_rps(self, can_id: int, rps: float) -> None:
-        self._send(can_id, Cmd.SET_SPEED_LIMIT, _pack_f32(rps))
-
-    def set_accel_limit_rps2(self, can_id: int, rps2: float) -> None:
-        self._send(can_id, Cmd.SET_ACCEL_LIMIT, _pack_f32(rps2))
-
-    def set_pid(self, can_id: int, kp: float, ki: float, kd: float) -> None:
-        self._send(can_id, Cmd.SET_PID, _pack_f32(kp) + _pack_f32(ki) + _pack_f32(kd))
-
-    def set_can_id(self, can_id: int, new_id: int) -> None:
-        self._send(can_id, Cmd.SET_ID, _pack_u16(new_id & 0x7FF))
-
-    def set_microsteps(self, can_id: int, microsteps: int) -> None:
-        self._send(can_id, Cmd.SET_MICROSTEPS, _pack_u16(microsteps))
-
-    def set_stealthchop(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_STEALTHCHOP, _pack_bool01(enable))
-
-    def set_external_mode(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_EXT_MODE, _pack_bool01(enable))
-
-    def set_external_spi(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_EXT_SPI, _pack_bool01(enable))
-
-    def set_endstop(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_ENDSTOP, _pack_bool01(enable))
-
-    def set_external_encoder(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_EXT_ENCODER, _pack_bool01(enable))
-
-    def set_units_degrees(self, can_id: int, use_degrees: bool) -> None:
-        self._send(can_id, Cmd.SET_UNITS, _pack_u8(1 if use_degrees else 0))
-
-    def set_encoder_invert(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_ENC_INVERT, _pack_bool01(enable))
-
-    def set_direction_invert(self, can_id: int, invert: bool) -> None:
-        self._send(can_id, Cmd.SET_DIR_INVERT, _pack_bool01(invert))
-
-    def enable_motor(self, can_id: int, enable: bool) -> None:
-        self._send(can_id, Cmd.SET_ENABLED, _pack_bool01(enable))
-
-    def set_steps_per_rev(self, can_id: int, steps_per_rev: int) -> None:
-        self._send(can_id, Cmd.SET_STEPS_PER_REV, _pack_u16(steps_per_rev))
-
-    def do_calibrate(self, can_id: int) -> None:
-        self._send(can_id, Cmd.DO_CALIBRATE, b"")
-
-    def do_homing(self, can_id: int, params: HomingParams) -> None:
-        self._send(can_id, Cmd.DO_HOMING, _pack_homing(params))
-
-    # ---------- State getters ----------
-    def _wait_state(self, can_id: int, timeout_s: Optional[float]) -> Optional[AxisState]:
-        deadline = None if timeout_s is None else (time.time() + timeout_s)
+    # ---- state getters
+    def get_state(self, can_id: int) -> Optional[AxisState]:
         with self._lock:
-            if timeout_s is None and can_id in self._state:
-                return self._state[can_id]
-            while True:
-                if can_id in self._state:
-                    return self._state[can_id]
-                if deadline is not None:
-                    remaining = deadline - time.time()
-                    if remaining <= 0:
-                        return None
-                    self._cond.wait(timeout=remaining)
-                else:
-                    self._cond.wait()
+            return self._state.get(can_id)
 
-    def get_axis_state(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[AxisState]:
-        return self._wait_state(can_id, timeout_s)
+    def request_config(self, can_id: int):
+        # exactly like HTML: id=target, cmd=GET_CONFIG, len=0
+        self.send(can_id, Cmd.GET_CONFIG, b"")
 
-    def get_current_angle(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
-        st = self._wait_state(can_id, timeout_s)
-        return None if st is None else st.currentAngle
+    # ---- high-level command wrappers (id must be provided)
+    def set_target_angle(self, can_id: int, angle: float):
+        self.send(can_id, Cmd.TARGET_ANGLE, _f32(angle))
 
-    def get_target_angle(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
-        st = self._wait_state(can_id, timeout_s)
-        return None if st is None else st.targetAngle
+    def set_current_ma(self, can_id: int, ma: int):
+        self.send(can_id, Cmd.SET_CURRENT_MA, _u16(ma))
 
-    def get_current_speed(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
-        st = self._wait_state(can_id, timeout_s)
-        return None if st is None else st.currentSpeed
+    def set_speed_limit_rps(self, can_id: int, rps: float):
+        self.send(can_id, Cmd.SET_SPEED_LIMIT, _f32(rps))
 
-    def get_current_temp(self, can_id: int, timeout_s: Optional[float] = None) -> Optional[float]:
-        st = self._wait_state(can_id, timeout_s)
-        return None if st is None else st.temperature
+    def set_accel_limit_rps2(self, can_id: int, rps2: float):
+        self.send(can_id, Cmd.SET_ACCEL_LIMIT, _f32(rps2))
 
+    def set_pid(self, can_id: int, kp: float, ki: float, kd: float):
+        self.send(can_id, Cmd.SET_PID, _f32(kp) + _f32(ki) + _f32(kd))
+
+    def set_can_id(self, can_id: int, new_id: int):
+        self.send(can_id, Cmd.SET_ID, _u16(new_id & 0x7FF))
+
+    def set_microsteps(self, can_id: int, microsteps: int):
+        self.send(can_id, Cmd.SET_MICROSTEPS, _u16(microsteps))
+
+    def set_stealthchop(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_STEALTHCHOP, _b01(enable))
+
+    def set_external_mode(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_EXT_MODE, _b01(enable))
+
+    def set_units_degrees(self, can_id: int, use_degrees: bool):
+        self.send(can_id, Cmd.SET_UNITS, _u8(1 if use_degrees else 0))
+
+    def set_encoder_invert(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_ENC_INVERT, _b01(enable))
+
+    def set_direction_invert(self, can_id: int, invert: bool):
+        self.send(can_id, Cmd.SET_DIR_INVERT, _b01(invert))
+
+    def enable_motor(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_ENABLED, _b01(enable))
+
+    def set_steps_per_rev(self, can_id: int, steps_per_rev: int):
+        self.send(can_id, Cmd.SET_STEPS_PER_REV, _u16(steps_per_rev))
+
+    def set_external_encoder(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_EXT_ENCODER, _b01(enable))
+
+    def set_external_spi(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_EXT_SPI, _b01(enable))
+
+    def set_endstop(self, can_id: int, enable: bool):
+        self.send(can_id, Cmd.SET_ENDSTOP, _b01(enable))
+
+    def do_calibrate(self, can_id: int):
+        self.send(can_id, Cmd.DO_CALIBRATE, b"")
+
+    def do_homing(self, can_id: int, p: HomingParams):
+        self.send(can_id, Cmd.DO_HOMING, _pack_homing(p))
+
+
+# ========= Friendly Stepper wrapper (pins id) =========
 class Stepper:
     def __init__(self, bridge: Bridge, can_id: int):
         if not (0 <= can_id <= 0x7FF):
-            raise ValueError("can_id must be 11-bit (0..0x7FF)")
+            raise ValueError("11-bit CAN id expected")
         self.bridge = bridge
-        self.can_id = can_id
+        self.id = can_id
 
-    def set_target_angle(self, angle: float) -> None:
-        self.bridge.set_target_angle(self.can_id, angle)
+    # convenience
+    def request_config(self):
+        self.bridge.request_config(self.id)
 
-    def set_current_ma(self, ma: int) -> None:
-        self.bridge.set_current_ma(self.can_id, ma)
+    def enable_motor(self, en: bool):
+        self.bridge.enable_motor(self.id, en)
 
-    def set_speed_limit_rps(self, rps: float) -> None:
-        self.bridge.set_speed_limit_rps(self.can_id, rps)
+    def set_target_angle(self, ang: float):
+        self.bridge.set_target_angle(self.id, ang)
 
-    def set_accel_limit_rps2(self, rps2: float) -> None:
-        self.bridge.set_accel_limit_rps2(self.can_id, rps2)
+    def set_current_ma(self, ma: int):
+        self.bridge.set_current_ma(self.id, ma)
 
-    def set_pid(self, kp: float, ki: float, kd: float) -> None:
-        self.bridge.set_pid(self.can_id, kp, ki, kd)
+    def set_speed_limit_rps(self, rps: float):
+        self.bridge.set_speed_limit_rps(self.id, rps)
 
-    def set_can_id(self, new_id: int) -> None:
-        self.bridge.set_can_id(self.can_id, new_id)
-        self.can_id = new_id & 0x7FF
+    def set_accel_limit_rps2(self, rps2: float):
+        self.bridge.set_accel_limit_rps2(self.id, rps2)
 
-    def set_microsteps(self, microsteps: int) -> None:
-        self.bridge.set_microsteps(self.can_id, microsteps)
+    def set_pid(self, kp, ki, kd):
+        self.bridge.set_pid(self.id, kp, ki, kd)
 
-    def set_stealthchop(self, enable: bool) -> None:
-        self.bridge.set_stealthchop(self.can_id, enable)
+    def set_can_id(self, new_id: int):
+        self.bridge.set_can_id(self.id, new_id)
+        self.id = new_id & 0x7FF
 
-    def set_external_mode(self, enable: bool) -> None:
-        self.bridge.set_external_mode(self.can_id, enable)
+    def set_microsteps(self, m: int):
+        self.bridge.set_microsteps(self.id, m)
 
-    def set_external_spi(self, enable: bool) -> None:
-        self.bridge.set_external_spi(self.can_id, enable)
+    def set_stealthchop(self, en: bool):
+        self.bridge.set_stealthchop(self.id, en)
 
-    def set_endstop(self, enable: bool) -> None:
-        self.bridge.set_endstop(self.can_id, enable)
+    def set_external_mode(self, en: bool):
+        self.bridge.set_external_mode(self.id, en)
 
-    def set_external_encoder(self, enable: bool) -> None:
-        self.bridge.set_external_encoder(self.can_id, enable)
+    def set_units_degrees(self, on: bool):
+        self.bridge.set_units_degrees(self.id, on)
 
-    def set_units_degrees(self, use_degrees: bool) -> None:
-        self.bridge.set_units_degrees(self.can_id, use_degrees)
+    def set_encoder_invert(self, on: bool):
+        self.bridge.set_encoder_invert(self.id, on)
 
-    def set_encoder_invert(self, enable: bool) -> None:
-        self.bridge.set_encoder_invert(self.can_id, enable)
+    def set_direction_invert(self, on: bool):
+        self.bridge.set_direction_invert(self.id, on)
 
-    def set_direction_invert(self, invert: bool) -> None:
-        self.bridge.set_direction_invert(self.can_id, invert)
+    def set_external_encoder(self, on: bool):
+        self.bridge.set_external_encoder(self.id, on)
 
-    def enable_motor(self, enable: bool) -> None:
-        self.bridge.enable_motor(self.can_id, enable)
+    def set_external_spi(self, on: bool):
+        self.bridge.set_external_spi(self.id, on)
 
-    def set_steps_per_rev(self, steps_per_rev: int) -> None:
-        self.bridge.set_steps_per_rev(self.can_id, steps_per_rev)
+    def set_endstop(self, on: bool):
+        self.bridge.set_endstop(self.id, on)
 
-    def do_calibrate(self) -> None:
-        self.bridge.do_calibrate(self.can_id)
+    def do_calibrate(self):
+        self.bridge.do_calibrate(self.id)
 
-    def do_homing(self, params: HomingParams) -> None:
-        self.bridge.do_homing(self.can_id, params)
+    def do_homing(self, p: HomingParams):
+        self.bridge.do_homing(self.id, p)
 
-    def get_axis_state(self, timeout_s: Optional[float] = None) -> Optional[AxisState]:
-        return self.bridge.get_axis_state(self.can_id, timeout_s)
-
-    def get_current_angle(self, timeout_s: Optional[float] = None) -> Optional[float]:
-        return self.bridge.get_current_angle(self.can_id, timeout_s)
-
-    def get_target_angle(self, timeout_s: Optional[float] = None) -> Optional[float]:
-        return self.bridge.get_target_angle(self.can_id, timeout_s)
-
-    def get_current_speed(self, timeout_s: Optional[float] = None) -> Optional[float]:
-        return self.bridge.get_current_speed(self.can_id, timeout_s)
-
-    def get_current_temp(self, timeout_s: Optional[float] = None) -> Optional[float]:
-        return self.bridge.get_current_temp(self.can_id, timeout_s)
+    def get_axis_state(self) -> Optional[AxisState]:
+        return self.bridge.get_state(self.id)

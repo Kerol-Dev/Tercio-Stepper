@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html data-theme="auto">
 
 <head>
   <meta charset="utf-8" />
@@ -20,6 +20,85 @@
       --switch-bg: #1f2937;
       --switch-on: #10b981;
       --switch-knob: #fff;
+
+      --field-bg: #1b1f2a;
+      --field-border: #2e3347;
+      --btn-secondary-bg: #1f2937;
+      --btn-secondary-fg: #e5e7eb;
+      --row-bg: #0e111a;
+      --log-bg: #000;
+      --tag-bg: #121727;
+      --tag-border: #2a3448;
+      --tag-fg: #b9cdfc;
+      --shadow: 0 6px 16px rgba(0, 0, 0, .25);
+    }
+
+    /* Dark */
+    :root[data-theme="dark"] {
+      --bg: #0b0b0e;
+      --fg: #e5e7eb;
+      --card: #121217;
+      --card2: #0f1117;
+      --border: #262632;
+      --muted: #9ca3af;
+      --accent: #10b981;
+      --accent-2: #60a5fa;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --switch-bg: #1f2937;
+      --switch-on: #10b981;
+      --switch-knob: #fff;
+
+      --field-bg: #1b1f2a;
+      --field-border: #2e3347;
+      --btn-secondary-bg: #1f2937;
+      --btn-secondary-fg: #e5e7eb;
+      --row-bg: #0e111a;
+      --log-bg: #000;
+      --tag-bg: #121727;
+      --tag-border: #2a3448;
+      --tag-fg: #b9cdfc;
+      --shadow: 0 6px 16px rgba(0, 0, 0, .25);
+    }
+
+    /* Light – higher contrast + clean cards */
+    :root[data-theme="light"] {
+      --bg: #f6f8fc;
+      --fg: #0f172a;
+      --card: #ffffff;
+      --card2: #ffffff;
+      --border: #d8dfeb;
+      --muted: #64748b;
+      --accent: #059669;
+      --accent-2: #2563eb;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --switch-bg: #e5e7eb;
+      --switch-on: #059669;
+      --switch-knob: #fff;
+
+      --field-bg: #f2f5fa;
+      --field-border: #d8dfeb;
+      --btn-secondary-bg: #eef2f7;
+      --btn-secondary-fg: #0f172a;
+      --row-bg: #ffffff;
+      --log-bg: #111;
+      --tag-bg: #eef2ff;
+      --tag-border: #c7d2fe;
+      --tag-fg: #1e3a8a;
+      --shadow: 0 8px 24px rgba(0, 0, 0, .06);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root[data-theme="auto"] {
+        color-scheme: light;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root[data-theme="auto"] {
+        color-scheme: dark;
+      }
     }
 
     * {
@@ -66,7 +145,8 @@
       background: linear-gradient(180deg, var(--card), var(--card2));
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 14px
+      padding: 14px;
+      box-shadow: var(--shadow);
     }
 
     .toolbar {
@@ -87,8 +167,8 @@
     }
 
     .btn.secondary {
-      background: #1f2937;
-      color: var(--fg)
+      background: var(--btn-secondary-bg);
+      color: var(--btn-secondary-fg)
     }
 
     .btn.info {
@@ -114,8 +194,8 @@
     input,
     select,
     textarea {
-      background: #1b1f2a;
-      border: 1px solid #2e3347;
+      background: var(--field-bg);
+      border: 1px solid var(--field-border);
       color: var(--fg);
       border-radius: 10px;
       padding: 12px 14px
@@ -138,8 +218,8 @@
     }
 
     .pill {
-      background: #131827;
-      border: 1px solid #22304a;
+      background: color-mix(in oklab, var(--fg) 10%, transparent);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 6px 10px;
       display: inline-flex;
@@ -190,7 +270,7 @@
 
     .dev-item {
       border: 1px solid var(--border);
-      background: #0e111a;
+      background: var(--row-bg);
       border-radius: 12px;
       padding: 10px;
       display: grid;
@@ -218,9 +298,9 @@
       font-size: 11px;
       padding: 3px 6px;
       border-radius: 999px;
-      border: 1px solid #2a3448;
-      background: #121727;
-      color: #b9cdfc
+      border: 1px solid var(--tag-border);
+      background: var(--tag-bg);
+      color: var(--tag-fg)
     }
 
     .tag.warn {
@@ -251,7 +331,7 @@
     }
 
     #log {
-      background: #000;
+      background: var(--log-bg);
       border: 1px solid var(--border);
       border-radius: 14px;
       height: 36vh;
@@ -279,8 +359,8 @@
     .switch {
       width: 46px;
       height: 26px;
-      background: #1f2937;
-      border: 1px solid #2e3347;
+      background: var(--switch-bg);
+      border: 1px solid var(--field-border);
       border-radius: 999px;
       position: relative;
       transition: .2s
@@ -289,7 +369,7 @@
     .knob {
       width: 22px;
       height: 22px;
-      background: #fff;
+      background: var(--switch-knob);
       border-radius: 50%;
       position: absolute;
       top: 50%;
@@ -321,7 +401,7 @@
     }
 
     tr {
-      background: #0e111a;
+      background: var(--row-bg);
       border: 1px solid var(--border)
     }
 
@@ -337,15 +417,22 @@
       border-bottom-right-radius: 10px
     }
 
+    /* Better inline label – prevents "(rad)" wrapping */
     label:not(.toggle) {
       display: block !important;
       margin: 0 0 16px !important
     }
 
-    label:not(.toggle)>* {
+    label:not(.toggle)>input,
+    label:not(.toggle)>select,
+    label:not(.toggle)>textarea {
       display: block;
       width: 100%;
       margin-top: 12px !important
+    }
+
+    .label-inline {
+      display: inline
     }
   </style>
 </head>
@@ -358,13 +445,13 @@
           <h2 style="margin:0">Devices</h2>
           <small>Auto-discovered from telemetry</small>
         </div>
+        <div style="margin-left: 8px;"></div>
         <div class="toolbar">
           <button id="btnConnect" class="btn">Connect</button>
-          <select id="selBaud">
-            <option>115200</option>
-            <option>230400</option>
-            <option>460800</option>
-            <option>921600</option>
+          <select id="selTheme" title="Theme">
+            <option value="auto">Auto</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
           </select>
         </div>
       </div>
@@ -397,8 +484,10 @@
             <div class="pill"><b>Preview:</b> <span id="preview" class="mono">—</span></div>
           </div>
           <div class="grid">
-            <label>Target (<span id="targetUnits">rad</span>)<input type="number" id="inTarget" step="0.001"
-                value="0.50"></label>
+            <label>
+              <span class="label-inline">Target (<span id="targetUnits">rad</span>)</span>
+              <input type="number" id="inTarget" step="0.001" value="0.50">
+            </label>
             <label>Speed limit (rps)<input type="number" id="inRps" step="0.01" value="5.0"></label>
             <label>Accel limit (rps²)<input type="number" id="inRps2" step="0.1" value="25.0"></label>
             <label>Current (mA)<input type="number" id="inmA" step="1" value="1200"></label>
@@ -451,8 +540,6 @@
                   class="knob"></span></span><span>Encoder Invert</span></label>
             <label class="toggle gated"><input id="tglDirInvert" type="checkbox"><span class="switch"><span
                   class="knob"></span></span><span>Direction Invert</span></label>
-            <label class="toggle gated"><input id="tglExtSpi" type="checkbox"><span class="switch"><span
-                  class="knob"></span></span><span>External SPI Mode</span></label>
           </div>
 
           <div class="section-title" style="margin-top:12px">
@@ -549,12 +636,14 @@
       const u16le = v => new Uint8Array([v & 0xFF, (v >> 8) & 0xFF]);
       const f32le = f => { const b = new ArrayBuffer(4); new DataView(b).setFloat32(0, Number(f) || 0, true); return new Uint8Array(b); };
 
+      // Commands
       const CMD = {
         TARGET_ANGLE: 0x01, SET_CURRENT_MA: 0x02, SET_SPEED_LIMIT: 0x03, SET_PID: 0x04, SET_ID: 0x05,
         SET_MICROSTEPS: 0x06, SET_STEALTHCHOP: 0x07, SET_EXT_MODE: 0x08, SET_UNITS: 0x09, SET_ENC_INVERT: 0x0A,
         SET_ENABLED: 0x0B, SET_STEPS_PER_REV: 0x0C, DO_CALIBRATE: 0x0D, DO_HOMING: 0x0E, SET_ENDSTOP: 0x0F,
-        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12, SET_EXT_SPI: 0x13,
-        TELEMETRY: 0x01, GET_CONFIG: 0x20
+        SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12,
+        TELEMETRY: 0x01, GET_CONFIG: 0x20,
+        SET_THEME: 0x21 // optional; FW can ignore
       };
       const TELEMETRY_CAN_ID = 0x000;
       const header = (id, cmd, len) => new Uint8Array([id & 0xFF, (id >> 8) & 0xFF, cmd & 0xFF, len & 0xFF]);
@@ -575,42 +664,45 @@
           p[0] = useMINTrigger ? 1 : 0; p.set(f32le(offset), 1); p[5] = activeLow ? 1 : 0; p.set(f32le(speed), 6); p[10] = direction ? 1 : 0;
           const h = header(id, CMD.DO_HOMING, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o;
         },
-        getConfig: (id) => header(id, CMD.GET_CONFIG, 0)
+        getConfig: (id) => header(id, CMD.GET_CONFIG, 0),
+        setTheme: (id, code) => { const p = u8(code & 0xFF); const h = header(id, CMD.SET_THEME, 1); const o = new Uint8Array(h.length + 1); o.set(h, 0); o.set(p, h.length); return o; }
       };
 
+      // THEME helpers
+      const THEME = { AUTO: 'auto', LIGHT: 'light', DARK: 'dark' };
+      const selTheme = $('selTheme');
+      function applyTheme(theme) { document.documentElement.setAttribute('data-theme', theme || THEME.AUTO); }
+      function getDeviceKeyTheme(id) { return `tercio_theme_dev_${id}`; }
+      function saveDeviceTheme(id, theme) { try { localStorage.setItem(getDeviceKeyTheme(id), theme); } catch { } }
+      function loadDeviceTheme(id) { try { return localStorage.getItem(getDeviceKeyTheme(id)); } catch { return null; } }
+
+      // UI refs
       const devListEl = $('devList'), devSearch = $('devSearch'), tblBodies = $('tblBodies');
       const statusEl = $('status'), previewEl = $('preview');
       const activeIdEl = $('activeId'), activeUnitsEl = $('activeUnits'), targetUnitsEl = $('targetUnits');
       const inTarget = $('inTarget'), inRps = $('inRps'), inRps2 = $('inRps2'), inmA = $('inmA');
-      const tglEnable = $('tglEnable'), btnSendTarget = $('btnSendTarget'), btnSendLimits = $('btnSendLimits'), btnSetCurrent = $('btnSetCurrent'), btnCal = $('btnCal');
-      const tlmSpeed = $('tlmSpeed'), tlmAngle = $('tlmAngle'), tlmTemp = $('tlmTemp'), tlmMin = $('tlmMin'), tlmMax = $('tlmMax'), tlmCal = $('tlmCal');
+      const tglEnable = $('tglEnable');
       const newIdEl = $('newId'), msEl = $('ms'), sprEl = $('spr');
-      const tglUnitsDeg = $('tglUnitsDeg'), tglStealth = $('tglStealth'), tglExtEnc = $('tglExtEnc'), tglExtMode = $('tglExtMode'), tglEndstop = $('tglEndstop'), tglEncInvert = $('tglEncInvert'), tglDirInvert = $('tglDirInvert'), tglExtSpi = $('tglExtSpi');
-      const pidKp = $('pidKp'), pidKi = $('pidKi'), pidKd = $('pidKd'), btnApplyPID = $('btnApplyPID');
-      const homeOffset = $('homeOffset'), homeSpeed = $('homeSpeed'), homeUseMin = $('homeUseMin'), homeActiveLow = $('homeActiveLow'), homeDirPlus = $('homeDirPlus'), btnDoHome = $('btnDoHome');
-      const btnApplyID = $('btnApplyID'), btnApplyStepper = $('btnApplyStepper'), bulkStart = $('bulkStart'), btnSequential = $('btnSequential'), btnRefreshList = $('btnRefreshList');
-      const btnRefreshDevices = $('btnRefreshDevices');
+      const tglUnitsDeg = $('tglUnitsDeg'), tglStealth = $('tglStealth'), tglExtEnc = $('tglExtEnc'), tglExtMode = $('tglExtMode'), tglEndstop = $('tglEndstop'), tglEncInvert = $('tglEncInvert'), tglDirInvert = $('tglDirInvert');
+      const pidKp = $('pidKp'), pidKi = $('pidKi'), pidKd = $('pidKd');
+      const homeOffset = $('homeOffset'), homeSpeed = $('homeSpeed'), homeUseMin = $('homeUseMin'), homeActiveLow = $('homeActiveLow'), homeDirPlus = $('homeDirPlus');
       const logEl = $('log');
 
       const setStatus = txt => statusEl.innerHTML = `<small>${txt}</small>`;
       const logLine = (p, buf, color) => { const time = new Date().toLocaleTimeString(); const text = (buf instanceof Uint8Array) ? bytesHex(buf) : String(buf); const div = document.createElement('div'); div.innerHTML = `<span style="color:#9ca3af">${time}</span> <b style="color:${color}">${p}</b> ${text}`; logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight; };
       const logTx = u8arr => logLine('>', u8arr, '#60a5fa'); const logInfo = t => logLine('*', t, '#f59e0b');
 
+      // App state
       const store = {
-        devices: new Map(),   // id -> latest state
-        tiles: new Map(),     // id -> {root, fields...}
-        activeId: null,
-        requestedCfg: new Set(),
-        lastCfgReqId: null,
+        devices: new Map(), tiles: new Map(), activeId: null, requestedCfg: new Set(), lastCfgReqId: null,
+        firstSynced: new Set(),
       };
 
+      // Tiles
       function makeTile(id, st) {
         const root = document.createElement('div');
-        root.className = 'dev-item';
-        root.tabIndex = 0;
-        root.dataset.id = String(id);
-        root.setAttribute('role', 'button');
-        root.setAttribute('aria-selected', 'false');
+        root.className = 'dev-item'; root.tabIndex = 0; root.dataset.id = String(id);
+        root.setAttribute('role', 'button'); root.setAttribute('aria-selected', 'false');
         root.innerHTML = `
           <div class="mono idtxt">0x${id.toString(16).toUpperCase()}</div>
           <div class="dev-tags">
@@ -628,13 +720,9 @@
         devListEl.appendChild(root);
 
         const fields = {
-          root,
-          unit: root.querySelector('.unit'),
-          spd: root.querySelector('.spd'),
-          ang: root.querySelector('.ang'),
-          tmp: root.querySelector('.tmp'),
-          cal: root.querySelector('.cal'),
-          ts: root.querySelector('.ts'),
+          root, unit: root.querySelector('.unit'), spd: root.querySelector('.spd'),
+          ang: root.querySelector('.ang'), tmp: root.querySelector('.tmp'),
+          cal: root.querySelector('.cal'), ts: root.querySelector('.ts'),
           idtxt: root.querySelector('.idtxt'),
         };
         store.tiles.set(id, fields);
@@ -648,10 +736,7 @@
         if (t.spd) t.spd.textContent = 'spd: ' + (st.speed != null ? st.speed.toFixed(2) : '—');
         if (t.ang) t.ang.textContent = 'ang: ' + (st.angle != null ? st.angle.toFixed(2) : '—');
         if (t.tmp) t.tmp.textContent = 'T: ' + (st.temp != null ? st.temp.toFixed(1) : '—');
-        if (t.cal) {
-          t.cal.textContent = st.cal ? 'CAL' : 'UNCAL';
-          t.cal.classList.toggle('warn', !st.cal);
-        }
+        if (t.cal) { t.cal.textContent = st.cal ? 'CAL' : 'UNCAL'; t.cal.classList.toggle('warn', !st.cal); }
         if (t.ts) t.ts.textContent = st.ts ? new Date(st.ts).toLocaleTimeString() : '';
         const act = store.activeId === id;
         t.root.classList.toggle('active', act);
@@ -663,13 +748,10 @@
         for (const [id, t] of store.tiles) {
           const st = store.devices.get(id) || {};
           const txt = ('' + id) + ' ' + (st.cal ? 'calibrated' : 'not');
-          const show = !q || txt.toLowerCase().includes(q);
-          t.root.style.display = show ? '' : 'none';
+          t.root.style.display = (!q || txt.toLowerCase().includes(q)) ? '' : 'none';
         }
       }
 
-      // Only adds/updates tiles for IDs present in store.devices.
-      // Never clears devList or removes existing tiles.
       function refreshListDevices() {
         const ids = [...store.devices.keys()].sort((a, b) => a - b);
         ids.forEach(id => {
@@ -690,6 +772,7 @@
         }
         sendBytes(frame.getConfig(id));
         store.lastCfgReqId = id;
+        syncThemeFromDeviceOrLocal(id);
         renderActive(); gate(); preview();
       }
 
@@ -743,6 +826,7 @@
         $('preview').textContent = bytesHex(frame.target(id, val));
       }
 
+      // Telemetry/config parse
       const AXIS_CFG_SIZE = 36;
       function parseTelemetryPayload(u8arr) {
         if (u8arr.length < AXIS_CFG_SIZE + 8) return null;
@@ -757,8 +841,8 @@
         if (u8arr.length >= AXIS_CFG_SIZE + 16) { temp = dv.getFloat32(o, true); o += 4; }
         if (u8arr.length >= AXIS_CFG_SIZE + 17) { min = dv.getUint8(o) !== 0; o += 1; }
         if (u8arr.length >= AXIS_CFG_SIZE + 18) { max = dv.getUint8(o) !== 0; }
-        const cal = (flags & 0x40) !== 0;
-        return { id: canArbId, units, speed, angle, temp, min, max, cal };
+        const cal = (flags & 0x40) !== 0; // RO bit
+        return { id: canArbId, units, speed, angle, temp, min, max, cal, flags };
       }
 
       function parseConfigPayload(u8arr) {
@@ -772,21 +856,33 @@
         const kp = dv.getFloat32(o, true); o += 4;
         const ki = dv.getFloat32(o, true); o += 4;
         const kd = dv.getFloat32(o, true); o += 4;
-        return { stepsPerRev, microsteps, currentmA, units, flags, kp, ki, kd };
+        let theme = null;
+        if (u8arr.length >= (2 + 2 + 2 + 1 + 1 + 12 + 1)) { theme = dv.getUint8(o); o += 1; }
+        return { stepsPerRev, microsteps, currentmA, units, flags, kp, ki, kd, theme };
       }
 
+      // Web Serial
       let port = null, reader = null, rxBuf = new Uint8Array(0);
+      let writer = null;          // single shared writer
+      let writeQueue = Promise.resolve(); // queued writes
 
       $('btnConnect').onclick = async () => {
         try {
           if (!('serial' in navigator)) { setStatus('Use Chrome/Edge.'); return; }
-          if (port) { try { reader?.releaseLock(); await port.close(); } catch { } port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return; }
+          if (port) {
+            try {
+              if (writer) { try { await writer.close?.(); } catch { } try { writer.releaseLock(); } catch { } writer = null; }
+              reader?.releaseLock();
+              await port.close();
+            } catch { }
+            port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return;
+          }
           // @ts-ignore
           port = await navigator.serial.requestPort();
-          await port.open({ baudRate: parseInt($('selBaud').value, 10) });
-          setStatus('Connected'); $('btnConnect').textContent = 'Disconnect'; logInfo('Connected');
+          await port.open({ baudRate: 115200 }); // fixed baud
+          writer = port.writable.getWriter();
 
-          // Clear filter (prevents “hidden by search” confusion)
+          setStatus('Connected'); $('btnConnect').textContent = 'Disconnect'; logInfo('Connected');
           $('devSearch').value = ''; filterList();
 
           reader = port.readable.getReader();
@@ -798,9 +894,16 @@
       };
 
       async function sendBytes(u8arr) {
-        if (!port) { setStatus('Not connected'); return; }
-        try { const w = port.writable.getWriter(); await w.write(u8arr); w.releaseLock(); logTx(u8arr); }
-        catch (e) { setStatus('Write failed: ' + (e?.message || e)); }
+        if (!port || !writer) return;
+        writeQueue = writeQueue.then(async () => {
+          try { await writer.write(u8arr); logTx(u8arr); }
+          catch (e) {
+            const msg = String(e?.message || e);
+            if (msg.includes('WritableStream is locked')) return; // ignore/recover
+            setStatus('Write failed: ' + msg);
+          }
+        });
+        return writeQueue;
       }
 
       function appendBuf(chunk) {
@@ -818,10 +921,9 @@
             const p = parseTelemetryPayload(payload);
             if (p) {
               const prev = store.devices.get(p.id) || {};
-              const st = { ...prev, units: p.units, speed: p.speed, angle: p.angle, temp: p.temp, min: p.min, max: p.max, cal: p.cal, ts: Date.now() };
+              const st = { ...prev, units: p.units, speed: p.speed, angle: p.angle, temp: p.temp, min: p.min, max: p.max, cal: p.cal, flags: p.flags, ts: Date.now() };
               store.devices.set(p.id, st);
 
-              // Per-tick UI updates
               updateTile(p.id, st);
               if (store.activeId === null) setActive(p.id);
               renderActive(); renderTable(); gate();
@@ -833,10 +935,18 @@
               const devId = store.lastCfgReqId ?? store.activeId;
               if (devId != null) {
                 const prev = store.devices.get(devId) || {};
-                const st = { ...prev, stepsPerRev: cfg.stepsPerRev, microsteps: cfg.microsteps, currentmA: cfg.currentmA, units: cfg.units, flags: cfg.flags, kp: cfg.kp, ki: cfg.ki, kd: cfg.kd };
+                const st = {
+                  ...prev,
+                  stepsPerRev: cfg.stepsPerRev, microsteps: cfg.microsteps, currentmA: cfg.currentmA,
+                  units: cfg.units, flags: cfg.flags, kp: cfg.kp, ki: cfg.ki, kd: cfg.kd, theme: cfg.theme
+                };
                 store.devices.set(devId, st);
                 updateTile(devId, st);
-                if (devId === store.activeId) syncFormFromState(devId);
+                if (devId === store.activeId) {
+                  syncFormFromState(devId);
+                  syncThemeFromDeviceOrLocal(devId);
+                  autoFirstSync(devId);
+                }
                 logInfo(`Config applied to ID ${devId}`);
                 renderActive(); gate();
               }
@@ -846,23 +956,77 @@
         }
       }
 
+      // Flag layout (your mapping)
+      // b0 encInvert, b1 dirInvert, b2 stealthChop, b3 externalMode,
+      // b4 enableEndStop, b5 externalEncoder, b6 calibratedOnce (RO)
+      const FL = {
+        ENCINV: 0x01,
+        DIRINV: 0x02,
+        STEALTH: 0x04,
+        EXTMODE: 0x08,
+        ENDSTOP: 0x10,
+        EXTENC: 0x20,
+        CAL: 0x40,
+      };
+
       function syncFormFromState(id) {
         const st = store.devices.get(id); if (!st) return;
         $('tglUnitsDeg').checked = (st.units === 1);
         const fl = st.flags ?? 0;
-        $('tglStealth').checked = !!(fl & 1);
-        $('tglExtEnc').checked = !!(fl & 2);
-        $('tglExtMode').checked = !!(fl & 4);
-        $('tglEndstop').checked = !!(fl & 8);
-        $('tglEncInvert').checked = !!(fl & 16);
-        $('tglDirInvert').checked = !!(fl & 32);
+        $('tglStealth').checked = !!(fl & FL.STEALTH);
+        $('tglExtEnc').checked = !!(fl & FL.EXTENC);
+        $('tglExtMode').checked = !!(fl & FL.EXTMODE);
+        $('tglEndstop').checked = !!(fl & FL.ENDSTOP);
+        $('tglEncInvert').checked = !!(fl & FL.ENCINV);
+        $('tglDirInvert').checked = !!(fl & FL.DIRINV);
+
         if (st.microsteps != null) $('ms').value = String(st.microsteps);
         if (st.stepsPerRev != null) $('spr').value = String(st.stepsPerRev);
         if (st.currentmA != null) $('inmA').value = String(st.currentmA);
-        if (st.kp != null) $('pidKp').value = st.kp.toFixed(3).replace(/\.?0+$/, '');
-        if (st.ki != null) $('pidKi').value = st.ki.toFixed(3).replace(/\.?0+$/, '');
-        if (st.kd != null) $('pidKd').value = st.kd.toFixed(3).replace(/\.?0+$/, '');
+        if (st.kp != null) $('pidKp').value = st.kp.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
+        if (st.ki != null) $('pidKi').value = st.ki.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
+        if (st.kd != null) $('pidKd').value = st.kd.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
       }
+
+      // First-time auto-sync (apply defaults once)
+      function autoFirstSync(id) {
+        if (store.firstSynced.has(id)) return;
+        const st = store.devices.get(id); if (!st) return;
+
+        // Enable motor by default on first sync
+        $('tglEnable').checked = true; sendBytes(frame.bool1(id, CMD.SET_ENABLED, true));
+
+        // Re-send toggles once to align UI ↔ FW
+        sendBytes(frame.bool1(id, CMD.SET_UNITS, $('tglUnitsDeg').checked));
+        sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, $('tglStealth').checked));
+        sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, $('tglExtEnc').checked));
+        sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, $('tglExtMode').checked));
+        sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, $('tglEndstop').checked));
+        sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, $('tglEncInvert').checked));
+        sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, $('tglDirInvert').checked));
+
+        store.firstSynced.add(id);
+        logInfo(`First-sync defaults applied for ID ${id}`);
+      }
+
+      // Theme sync
+      function syncThemeFromDeviceOrLocal(id) {
+        const st = store.devices.get(id) || {};
+        let themePref = null;
+        if (typeof st.theme === 'number') themePref = st.theme === 0 ? 'dark' : (st.theme === 1 ? 'light' : 'auto');
+        if (!themePref) themePref = loadDeviceTheme(id);
+        if (!themePref) themePref = 'auto';
+        selTheme.value = themePref; applyTheme(themePref);
+      }
+
+      selTheme.addEventListener('change', () => {
+        const t = selTheme.value; applyTheme(t);
+        if (store.activeId != null) {
+          saveDeviceTheme(store.activeId, t);
+          let code = 2; if (t === 'dark') code = 0; else if (t === 'light') code = 1;
+          sendBytes(frame.setTheme(store.activeId, code)); // harmless if FW ignores
+        }
+      });
 
       // Buttons / Inputs
       $('btnRefreshDevices').onclick = () => { refreshListDevices(); };
@@ -899,14 +1063,13 @@
         sendBytes(frame.stepsPerRev(id, parseInt($('spr').value, 10) || 200));
       };
 
-      $('tglUnitsDeg').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, $('tglUnitsDeg').checked)); };
+      $('tglUnitsDeg').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, $('tglUnitsDeg').checked)); renderActive(); };
       $('tglStealth').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, $('tglStealth').checked)); };
       $('tglExtEnc').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, $('tglExtEnc').checked)); };
       $('tglExtMode').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, $('tglExtMode').checked)); };
       $('tglEndstop').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, $('tglEndstop').checked)); };
       $('tglEncInvert').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, $('tglEncInvert').checked)); };
       $('tglDirInvert').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, $('tglDirInvert').checked)); };
-      $('tglExtSpi').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_SPI, $('tglExtSpi').checked)); };
 
       $('btnApplyPID').onclick = () => {
         if (store.activeId == null) return;
@@ -955,8 +1118,8 @@
         const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
       };
 
-      // Initial paint (no placeholders that could clear later)
-      renderTable(); gate();
+      // Initial paint
+      renderTable(); gate(); applyTheme('auto');
     })();
   </script>
 </body>
