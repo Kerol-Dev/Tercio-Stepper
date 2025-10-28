@@ -1,5 +1,5 @@
 <!doctype html>
-<html data-theme="auto">
+<html>
 
 <head>
   <meta charset="utf-8" />
@@ -20,20 +20,19 @@
       --switch-bg: #1f2937;
       --switch-on: #10b981;
       --switch-knob: #fff;
-
       --field-bg: #1b1f2a;
       --field-border: #2e3347;
       --btn-secondary-bg: #1f2937;
       --btn-secondary-fg: #e5e7eb;
+
       --row-bg: #0e111a;
       --log-bg: #000;
-      --tag-bg: #121727;
-      --tag-border: #2a3448;
-      --tag-fg: #b9cdfc;
-      --shadow: 0 6px 16px rgba(0, 0, 0, .25);
+
+      --badge-bg: rgba(255, 255, 255, 0.06);
+      --badge-fg: #e5e7eb;
     }
 
-    /* Dark */
+    /* THEME – DARK */
     :root[data-theme="dark"] {
       --bg: #0b0b0e;
       --fg: #e5e7eb;
@@ -45,59 +44,63 @@
       --accent-2: #60a5fa;
       --warn: #f59e0b;
       --danger: #ef4444;
-      --switch-bg: #1f2937;
-      --switch-on: #10b981;
-      --switch-knob: #fff;
 
       --field-bg: #1b1f2a;
       --field-border: #2e3347;
+
       --btn-secondary-bg: #1f2937;
       --btn-secondary-fg: #e5e7eb;
+
       --row-bg: #0e111a;
       --log-bg: #000;
-      --tag-bg: #121727;
-      --tag-border: #2a3448;
-      --tag-fg: #b9cdfc;
-      --shadow: 0 6px 16px rgba(0, 0, 0, .25);
+
+      --badge-bg: rgba(255, 255, 255, 0.06);
+      --badge-fg: #e5e7eb;
+
+      --switch-bg: #1f2937;
+      --switch-on: #10b981;
+      --switch-knob: #fff;
     }
 
-    /* Light – higher contrast + clean cards */
+    /* THEME – LIGHT (no dark boxes, proper contrast) */
     :root[data-theme="light"] {
-      --bg: #f6f8fc;
+      --bg: #f7f8fc;
       --fg: #0f172a;
       --card: #ffffff;
-      --card2: #ffffff;
-      --border: #d8dfeb;
+      --card2: #f5f7fb;
+      --border: #d7deea;
       --muted: #64748b;
       --accent: #059669;
       --accent-2: #2563eb;
       --warn: #d97706;
       --danger: #dc2626;
+
+      --field-bg: #f3f6fb;
+      --field-border: #d7deea;
+
+      --btn-secondary-bg: #eef2f7;
+      --btn-secondary-fg: #0f172a;
+
+      --row-bg: #ffffff;
+      --log-bg: #111;
+
+      --badge-bg: rgba(15, 23, 42, 0.06);
+      --badge-fg: #0f172a;
+
       --switch-bg: #e5e7eb;
       --switch-on: #059669;
       --switch-knob: #fff;
-
-      --field-bg: #f2f5fa;
-      --field-border: #d8dfeb;
-      --btn-secondary-bg: #eef2f7;
-      --btn-secondary-fg: #0f172a;
-      --row-bg: #ffffff;
-      --log-bg: #111;
-      --tag-bg: #eef2ff;
-      --tag-border: #c7d2fe;
-      --tag-fg: #1e3a8a;
-      --shadow: 0 8px 24px rgba(0, 0, 0, .06);
     }
 
     @media (prefers-color-scheme: light) {
       :root[data-theme="auto"] {
-        color-scheme: light;
+        color-scheme: light
       }
     }
 
     @media (prefers-color-scheme: dark) {
       :root[data-theme="auto"] {
-        color-scheme: dark;
+        color-scheme: dark
       }
     }
 
@@ -145,15 +148,19 @@
       background: linear-gradient(180deg, var(--card), var(--card2));
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 14px;
-      box-shadow: var(--shadow);
+      padding: 14px
     }
 
     .toolbar {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       align-items: center;
       flex-wrap: wrap
+    }
+
+    .theme-label {
+      margin-left: 12px;
+      color: var(--muted)
     }
 
     .btn {
@@ -218,7 +225,8 @@
     }
 
     .pill {
-      background: color-mix(in oklab, var(--fg) 10%, transparent);
+      background: var(--badge-bg);
+      color: var(--badge-fg);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 6px 10px;
@@ -247,11 +255,68 @@
       display: none
     }
 
-    .dev-header {
+
+    /* Devices header layout */
+    .dev-header2 {
       display: flex;
       justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .dev-header2 .title {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .dev-header2 .title h2 {
+      margin: 0
+    }
+
+    .dev-header2 .title .sub {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    /* Right-side controls sit on one line */
+    .dev-header2 .controls {
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      margin-bottom: 8px
+      gap: 8px;
+    }
+
+    /* Compact theme label + select */
+    .theme-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .theme-row>span {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    /* Make the select height match the button better */
+    .dev-header2 .controls select {
+      padding: 8px 12px;
+      border-radius: 10px;
+    }
+
+    /* Mobile fallback: stack nicely */
+    @media (max-width:700px) {
+      .dev-header2 {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .dev-header2 .controls {
+        flex-wrap: wrap;
+      }
     }
 
     .search {
@@ -298,9 +363,9 @@
       font-size: 11px;
       padding: 3px 6px;
       border-radius: 999px;
-      border: 1px solid var(--tag-border);
-      background: var(--tag-bg);
-      color: var(--tag-fg)
+      border: 1px solid var(--border);
+      background: var(--badge-bg);
+      color: var(--badge-fg)
     }
 
     .tag.warn {
@@ -369,7 +434,7 @@
     .knob {
       width: 22px;
       height: 22px;
-      background: var(--switch-knob);
+      background: #fff;
       border-radius: 50%;
       position: absolute;
       top: 50%;
@@ -417,7 +482,7 @@
       border-bottom-right-radius: 10px
     }
 
-    /* Better inline label – prevents "(rad)" wrapping */
+    /* Label spacing & inline "(rad)" fix */
     label:not(.toggle) {
       display: block !important;
       margin: 0 0 16px !important
@@ -440,13 +505,12 @@
 <body>
   <div class="app">
     <div class="card">
-      <div class="dev-header">
-        <div>
-          <h2 style="margin:0">Devices</h2>
-          <small>Auto-discovered from telemetry</small>
+      <div class="dev-header2">
+        <div class="title">
+          <h2>Devices</h2>
+          <span class="sub">Auto-discovered from telemetry</span>
         </div>
-        <div style="margin-left: 8px;"></div>
-        <div class="toolbar">
+        <div class="controls">
           <button id="btnConnect" class="btn">Connect</button>
           <select id="selTheme" title="Theme">
             <option value="auto">Auto</option>
@@ -455,14 +519,12 @@
           </select>
         </div>
       </div>
-      <div class="search">
-        <input id="devSearch" placeholder="Filter by ID/status…" class="mono" style="flex:1">
-        <button id="btnRefreshDevices" class="btn secondary">Refresh Devices</button>
-        <button id="btnExport" class="btn secondary">Export CSV</button>
-      </div>
+
+      <div class="search"> <input id="devSearch" placeholder="Filter by ID/status…" class="mono" style="flex:1"> <button
+          id="btnRefreshDevices" class="btn secondary">Refresh Devices</button> <button id="btnExport"
+          class="btn secondary">Export CSV</button> </div>
       <div id="devList" class="dev-list" style="margin-top:10px"></div>
     </div>
-
     <div class="card">
       <div class="section-title">
         <div class="row">
@@ -625,7 +687,6 @@
       </div>
     </div>
   </div>
-
   <script>
     (() => {
       const $ = id => document.getElementById(id);
@@ -636,48 +697,47 @@
       const u16le = v => new Uint8Array([v & 0xFF, (v >> 8) & 0xFF]);
       const f32le = f => { const b = new ArrayBuffer(4); new DataView(b).setFloat32(0, Number(f) || 0, true); return new Uint8Array(b); };
 
-      // Commands
+      // Commands (must match firmware)
       const CMD = {
         TARGET_ANGLE: 0x01, SET_CURRENT_MA: 0x02, SET_SPEED_LIMIT: 0x03, SET_PID: 0x04, SET_ID: 0x05,
         SET_MICROSTEPS: 0x06, SET_STEALTHCHOP: 0x07, SET_EXT_MODE: 0x08, SET_UNITS: 0x09, SET_ENC_INVERT: 0x0A,
         SET_ENABLED: 0x0B, SET_STEPS_PER_REV: 0x0C, DO_CALIBRATE: 0x0D, DO_HOMING: 0x0E, SET_ENDSTOP: 0x0F,
         SET_EXT_ENCODER: 0x10, SET_ACCEL_LIMIT: 0x11, SET_DIR_INVERT: 0x12,
-        TELEMETRY: 0x01, GET_CONFIG: 0x20,
-        SET_THEME: 0x21 // optional; FW can ignore
+        TELEMETRY: 0x01, GET_CONFIG: 0x20
       };
       const TELEMETRY_CAN_ID = 0x000;
       const header = (id, cmd, len) => new Uint8Array([id & 0xFF, (id >> 8) & 0xFF, cmd & 0xFF, len & 0xFF]);
 
       const frame = {
-        target: (id, val) => { const p = f32le(val); const h = header(id, CMD.TARGET_ANGLE, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        speed: (id, rps) => { const p = f32le(rps); const h = header(id, CMD.SET_SPEED_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        accel: (id, a) => { const p = f32le(a); const h = header(id, CMD.SET_ACCEL_LIMIT, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        current: (id, ma) => { const p = u16le(ma); const h = header(id, CMD.SET_CURRENT_MA, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        setId: (id, newId) => { const p = u16le(clamp11(newId)); const h = header(id, CMD.SET_ID, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        microsteps: (id, n) => { const p = u16le(n); const h = header(id, CMD.SET_MICROSTEPS, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        stepsPerRev: (id, n) => { const p = u16le(n); const h = header(id, CMD.SET_STEPS_PER_REV, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        bool1: (id, cmd, on) => { const p = u8(on ? 1 : 0); const h = header(id, cmd, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
-        pid: (id, kp, ki, kd) => { const p = new Uint8Array(12); p.set(f32le(kp), 0); p.set(f32le(ki), 4); p.set(f32le(kd), 8); const h = header(id, CMD.SET_PID, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        target: (id, val) => { const p = f32le(val), h = header(id, CMD.TARGET_ANGLE, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        speed: (id, rps) => { const p = f32le(rps), h = header(id, CMD.SET_SPEED_LIMIT, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        accel: (id, a) => { const p = f32le(a), h = header(id, CMD.SET_ACCEL_LIMIT, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        current: (id, ma) => { const p = u16le(ma), h = header(id, CMD.SET_CURRENT_MA, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        setId: (id, nid) => { const p = u16le(clamp11(nid)), h = header(id, CMD.SET_ID, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        microsteps: (id, n) => { const p = u16le(n), h = header(id, CMD.SET_MICROSTEPS, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        stepsPerRev: (id, n) => { const p = u16le(n), h = header(id, CMD.SET_STEPS_PER_REV, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        bool1: (id, cmd, on) => { const p = u8(on ? 1 : 0), h = header(id, cmd, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
+        pid: (id, kp, ki, kd) => { const p = new Uint8Array(12); p.set(f32le(kp), 0); p.set(f32le(ki), 4); p.set(f32le(kd), 8); const h = header(id, CMD.SET_PID, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o; },
         calibrate: (id) => header(id, CMD.DO_CALIBRATE, 0),
         homing: (id, { useMINTrigger, offset, activeLow, speed, direction }) => {
           const p = new Uint8Array(11);
           p[0] = useMINTrigger ? 1 : 0; p.set(f32le(offset), 1); p[5] = activeLow ? 1 : 0; p.set(f32le(speed), 6); p[10] = direction ? 1 : 0;
-          const h = header(id, CMD.DO_HOMING, p.length); const o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o;
+          const h = header(id, CMD.DO_HOMING, p.length), o = new Uint8Array(h.length + p.length); o.set(h, 0); o.set(p, h.length); return o;
         },
-        getConfig: (id) => header(id, CMD.GET_CONFIG, 0),
-        setTheme: (id, code) => { const p = u8(code & 0xFF); const h = header(id, CMD.SET_THEME, 1); const o = new Uint8Array(h.length + 1); o.set(h, 0); o.set(p, h.length); return o; }
+        getConfig: (id) => header(id, CMD.GET_CONFIG, 0)
       };
 
-      // THEME helpers
-      const THEME = { AUTO: 'auto', LIGHT: 'light', DARK: 'dark' };
+      // THEME – global
       const selTheme = $('selTheme');
-      function applyTheme(theme) { document.documentElement.setAttribute('data-theme', theme || THEME.AUTO); }
-      function getDeviceKeyTheme(id) { return `tercio_theme_dev_${id}`; }
-      function saveDeviceTheme(id, theme) { try { localStorage.setItem(getDeviceKeyTheme(id), theme); } catch { } }
-      function loadDeviceTheme(id) { try { return localStorage.getItem(getDeviceKeyTheme(id)); } catch { return null; } }
+      const THEME_KEY = 'tercio_theme_global';
+      const applyTheme = t => document.documentElement.setAttribute('data-theme', t || 'auto');
+      const saveTheme = t => { try { localStorage.setItem(THEME_KEY, t) } catch { } };
+      const loadTheme = () => { try { return localStorage.getItem(THEME_KEY) || 'auto' } catch { return 'auto' } };
+      selTheme.value = loadTheme(); applyTheme(selTheme.value);
+      selTheme.addEventListener('change', () => { const t = selTheme.value; applyTheme(t); saveTheme(t); });
 
       // UI refs
-      const devListEl = $('devList'), devSearch = $('devSearch'), tblBodies = $('tblBodies');
+      const devListEl = $('devList'), devSearch = $('devSearch');
       const statusEl = $('status'), previewEl = $('preview');
       const activeIdEl = $('activeId'), activeUnitsEl = $('activeUnits'), targetUnitsEl = $('targetUnits');
       const inTarget = $('inTarget'), inRps = $('inRps'), inRps2 = $('inRps2'), inmA = $('inmA');
@@ -686,6 +746,8 @@
       const tglUnitsDeg = $('tglUnitsDeg'), tglStealth = $('tglStealth'), tglExtEnc = $('tglExtEnc'), tglExtMode = $('tglExtMode'), tglEndstop = $('tglEndstop'), tglEncInvert = $('tglEncInvert'), tglDirInvert = $('tglDirInvert');
       const pidKp = $('pidKp'), pidKi = $('pidKi'), pidKd = $('pidKd');
       const homeOffset = $('homeOffset'), homeSpeed = $('homeSpeed'), homeUseMin = $('homeUseMin'), homeActiveLow = $('homeActiveLow'), homeDirPlus = $('homeDirPlus');
+      const tlmSpeed = $('tlmSpeed'), tlmAngle = $('tlmAngle'), tlmTemp = $('tlmTemp'), tlmMin = $('tlmMin'), tlmMax = $('tlmMax'), tlmCal = $('tlmCal');
+      const tblBodies = $('tblBodies');
       const logEl = $('log');
 
       const setStatus = txt => statusEl.innerHTML = `<small>${txt}</small>`;
@@ -693,56 +755,39 @@
       const logTx = u8arr => logLine('>', u8arr, '#60a5fa'); const logInfo = t => logLine('*', t, '#f59e0b');
 
       // App state
-      const store = {
-        devices: new Map(), tiles: new Map(), activeId: null, requestedCfg: new Set(), lastCfgReqId: null,
-        firstSynced: new Set(),
-      };
+      const store = { devices: new Map(), tiles: new Map(), activeId: null, requestedCfg: new Set(), lastCfgReqId: null };
 
       // Tiles
       function makeTile(id, st) {
         const root = document.createElement('div');
-        root.className = 'dev-item'; root.tabIndex = 0; root.dataset.id = String(id);
-        root.setAttribute('role', 'button'); root.setAttribute('aria-selected', 'false');
+        root.className = 'dev-item'; root.tabIndex = 0; root.dataset.id = String(id); root.setAttribute('role', 'button'); root.setAttribute('aria-selected', 'false');
         root.innerHTML = `
-          <div class="mono idtxt">0x${id.toString(16).toUpperCase()}</div>
-          <div class="dev-tags">
-            <span class="tag unit">units: ${st.units === 1 ? 'deg' : 'rad'}</span>
-            <span class="tag spd">spd: ${st.speed != null ? st.speed.toFixed(2) : '—'}</span>
-            <span class="tag ang">ang: ${st.angle != null ? st.angle.toFixed(2) : '—'}</span>
-            <span class="tag tmp">T: ${st.temp != null ? st.temp.toFixed(1) : '—'}</span>
-            <span class="tag cal ${st.cal ? '' : 'warn'}">${st.cal ? 'CAL' : 'UNCAL'}</span>
-          </div>
-          <div class="mono ts" style="opacity:.7">${st.ts ? new Date(st.ts).toLocaleTimeString() : ''}</div>
-        `;
+        <div class="mono idtxt">0x${id.toString(16).toUpperCase()}</div>
+        <div class="dev-tags">
+          <span class="tag unit">units: ${st.units === 1 ? 'deg' : 'rad'}</span>
+          <span class="tag spd">spd: ${st.speed != null ? st.speed.toFixed(2) : '—'}</span>
+          <span class="tag ang">ang: ${st.angle != null ? st.angle.toFixed(2) : '—'}</span>
+          <span class="tag tmp">T: ${st.temp != null ? st.temp.toFixed(1) : '—'}</span>
+          <span class="tag cal ${st.cal ? '' : 'warn'}">${st.cal ? 'CAL' : 'UNCAL'}</span>
+        </div>
+        <div class="mono ts" style="opacity:.7">${st.ts ? new Date(st.ts).toLocaleTimeString() : ''}</div>`;
         const focus = () => setActive(id);
-        root.onclick = focus;
-        root.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focus(); } };
+        root.onclick = focus; root.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focus(); } };
         devListEl.appendChild(root);
-
-        const fields = {
-          root, unit: root.querySelector('.unit'), spd: root.querySelector('.spd'),
-          ang: root.querySelector('.ang'), tmp: root.querySelector('.tmp'),
-          cal: root.querySelector('.cal'), ts: root.querySelector('.ts'),
-          idtxt: root.querySelector('.idtxt'),
-        };
+        const fields = { root, unit: root.querySelector('.unit'), spd: root.querySelector('.spd'), ang: root.querySelector('.ang'), tmp: root.querySelector('.tmp'), cal: root.querySelector('.cal'), ts: root.querySelector('.ts'), idtxt: root.querySelector('.idtxt') };
         store.tiles.set(id, fields);
         return fields;
       }
-
       function updateTile(id, st) {
-        let t = store.tiles.get(id);
-        if (!t) { t = makeTile(id, st); }
+        let t = store.tiles.get(id); if (!t) t = makeTile(id, st);
         if (t.unit) t.unit.textContent = 'units: ' + (st.units === 1 ? 'deg' : 'rad');
         if (t.spd) t.spd.textContent = 'spd: ' + (st.speed != null ? st.speed.toFixed(2) : '—');
         if (t.ang) t.ang.textContent = 'ang: ' + (st.angle != null ? st.angle.toFixed(2) : '—');
         if (t.tmp) t.tmp.textContent = 'T: ' + (st.temp != null ? st.temp.toFixed(1) : '—');
         if (t.cal) { t.cal.textContent = st.cal ? 'CAL' : 'UNCAL'; t.cal.classList.toggle('warn', !st.cal); }
         if (t.ts) t.ts.textContent = st.ts ? new Date(st.ts).toLocaleTimeString() : '';
-        const act = store.activeId === id;
-        t.root.classList.toggle('active', act);
-        t.root.setAttribute('aria-selected', act ? 'true' : 'false');
+        const act = store.activeId === id; t.root.classList.toggle('active', act); t.root.setAttribute('aria-selected', act ? 'true' : 'false');
       }
-
       function filterList() {
         const q = (devSearch.value || '').trim().toLowerCase();
         for (const [id, t] of store.tiles) {
@@ -751,50 +796,37 @@
           t.root.style.display = (!q || txt.toLowerCase().includes(q)) ? '' : 'none';
         }
       }
-
       function refreshListDevices() {
         const ids = [...store.devices.keys()].sort((a, b) => a - b);
-        ids.forEach(id => {
-          const st = store.devices.get(id) || {};
-          if (!store.tiles.has(id)) makeTile(id, st);
-          else updateTile(id, st);
-        });
+        ids.forEach(id => { const st = store.devices.get(id) || {}; if (!store.tiles.has(id)) makeTile(id, st); else updateTile(id, st); });
         filterList();
       }
 
       function setActive(id) {
         if (!store.devices.has(id)) return;
         store.activeId = id;
-        for (const [tid, t] of store.tiles) {
-          const act = tid === id;
-          t.root.classList.toggle('active', act);
-          t.root.setAttribute('aria-selected', act ? 'true' : 'false');
-        }
-        sendBytes(frame.getConfig(id));
-        store.lastCfgReqId = id;
-        syncThemeFromDeviceOrLocal(id);
+        for (const [tid, t] of store.tiles) { const act = tid === id; t.root.classList.toggle('active', act); t.root.setAttribute('aria-selected', act ? 'true' : 'false'); }
+        sendBytes(frame.getConfig(id)); store.lastCfgReqId = id;
         renderActive(); gate(); preview();
       }
-
       function renderActive() {
         const st = store.devices.get(store.activeId);
-        $('activeId').textContent = (store.activeId == null) ? '—' : (`0x${store.activeId.toString(16).toUpperCase()} (${store.activeId})`);
+        activeIdEl.textContent = (store.activeId == null) ? '—' : (`0x${store.activeId.toString(16).toUpperCase()} (${store.activeId})`);
         const units = st ? (st.units || 0) : 0;
-        $('activeUnits').textContent = units === 1 ? 'deg' : 'rad';
-        $('targetUnits').textContent = units === 1 ? 'deg' : 'rad';
+        activeUnitsEl.textContent = units === 1 ? 'deg' : 'rad';
+        targetUnitsEl.textContent = units === 1 ? 'deg' : 'rad';
         $('btn90').textContent = units === 1 ? '90°' : 'π/2';
         $('btn180').textContent = units === 1 ? '180°' : 'π';
-        $('tlmSpeed').textContent = st && st.speed != null ? st.speed.toFixed(4) : '—';
-        $('tlmAngle').textContent = st && st.angle != null ? st.angle.toFixed(4) : '—';
-        $('tlmTemp').textContent = st && st.temp != null ? st.temp.toFixed(1) : '—';
-        $('tlmMin').textContent = st && st.min != null ? (st.min ? 'YES' : 'NO') : '—';
-        $('tlmMax').textContent = st && st.max != null ? (st.max ? 'YES' : 'NO') : '—';
-        $('tlmCal').textContent = st && st.cal ? 'YES' : 'NO';
+        tlmSpeed.textContent = st && st.speed != null ? st.speed.toFixed(4) : '—';
+        tlmAngle.textContent = st && st.angle != null ? st.angle.toFixed(4) : '—';
+        tlmTemp.textContent = st && st.temp != null ? st.temp.toFixed(1) : '—';
+        tlmMin.textContent = st && st.min != null ? (st.min ? 'YES' : 'NO') : '—';
+        tlmMax.textContent = st && st.max != null ? (st.max ? 'YES' : 'NO') : '—';
+        tlmCal.textContent = st && st.cal ? 'YES' : 'NO';
       }
-
       function renderTable() {
         const ids = [...store.devices.keys()].sort((a, b) => a - b);
-        $('tblBodies').innerHTML = '';
+        tblBodies.innerHTML = '';
         ids.forEach(id => {
           const s = store.devices.get(id) || {};
           const tr = document.createElement('tr');
@@ -808,25 +840,22 @@
           tr.appendChild(td(s.max != null ? (s.max ? 'YES' : 'NO') : '—'));
           tr.appendChild(td(s.cal ? 'YES' : 'NO'));
           tr.appendChild(td(s.ts ? new Date(s.ts).toLocaleTimeString() : '—'));
-          $('tblBodies').appendChild(tr);
+          tblBodies.appendChild(tr);
         });
       }
-
       function gate() {
         const st = store.devices.get(store.activeId);
         const ok = !!(st && st.cal);
-        document.querySelectorAll('.gated input, .gated select, .gated button, .gated textarea')
-          .forEach(el => { el.disabled = !ok; });
+        document.querySelectorAll('.gated input, .gated select, .gated button, .gated textarea').forEach(el => { el.disabled = !ok; });
         $('calibWarn').classList.toggle('hidden', !(store.activeId && !ok));
       }
-
       function preview() {
-        if (store.activeId == null) { $('preview').textContent = '—'; return; }
-        const id = store.activeId, val = parseFloat($('inTarget').value) || 0;
-        $('preview').textContent = bytesHex(frame.target(id, val));
+        if (store.activeId == null) { previewEl.textContent = '—'; return; }
+        const id = store.activeId, val = parseFloat(inTarget.value) || 0;
+        previewEl.textContent = bytesHex(frame.target(id, val));
       }
 
-      // Telemetry/config parse
+      // Telemetry parsing (matches firmware packing)
       const AXIS_CFG_SIZE = 36;
       function parseTelemetryPayload(u8arr) {
         if (u8arr.length < AXIS_CFG_SIZE + 8) return null;
@@ -841,10 +870,9 @@
         if (u8arr.length >= AXIS_CFG_SIZE + 16) { temp = dv.getFloat32(o, true); o += 4; }
         if (u8arr.length >= AXIS_CFG_SIZE + 17) { min = dv.getUint8(o) !== 0; o += 1; }
         if (u8arr.length >= AXIS_CFG_SIZE + 18) { max = dv.getUint8(o) !== 0; }
-        const cal = (flags & 0x40) !== 0; // RO bit
+        const cal = (flags & 0x40) !== 0;
         return { id: canArbId, units, speed, angle, temp, min, max, cal, flags };
       }
-
       function parseConfigPayload(u8arr) {
         if (u8arr.length < 2 + 2 + 2 + 1 + 1 + 12) return null;
         const dv = new DataView(u8arr.buffer, u8arr.byteOffset, u8arr.byteLength); let o = 0;
@@ -856,39 +884,73 @@
         const kp = dv.getFloat32(o, true); o += 4;
         const ki = dv.getFloat32(o, true); o += 4;
         const kd = dv.getFloat32(o, true); o += 4;
-        let theme = null;
-        if (u8arr.length >= (2 + 2 + 2 + 1 + 1 + 12 + 1)) { theme = dv.getUint8(o); o += 1; }
-        return { stepsPerRev, microsteps, currentmA, units, flags, kp, ki, kd, theme };
+        return { stepsPerRev, microsteps, currentmA, units, flags, kp, ki, kd };
       }
 
-      // Web Serial
+      // Flags (bit layout used by FW)
+      const FL = { ENCINV: 0x01, DIRINV: 0x02, STEALTH: 0x04, EXTMODE: 0x08, ENDSTOP: 0x10, EXTENC: 0x20, CAL: 0x40 };
+      function applyFlagsToFormFromByte(flags) {
+        tglStealth.checked = !!(flags & FL.STEALTH);
+        tglExtEnc.checked = !!(flags & FL.EXTENC);
+        tglExtMode.checked = !!(flags & FL.EXTMODE);
+        tglEndstop.checked = !!(flags & FL.ENDSTOP);
+        tglEncInvert.checked = !!(flags & FL.ENCINV);
+        tglDirInvert.checked = !!(flags & FL.DIRINV);
+      }
+
+      function syncFormFromState(id) {
+        const st = store.devices.get(id); if (!st) return;
+
+        // Units
+        const isDeg = (st.units === 1);
+        const u = $('tglUnitsDeg');
+        if (u) { u.indeterminate = false; u.checked = isDeg; }
+
+        // Flags bitfield
+        const fl = st.flags ?? 0;
+        const setCB = (el, on) => { if (!el) return; el.indeterminate = false; el.checked = !!on; };
+
+        setCB($('tglStealth'), (fl & FL.STEALTH));
+        setCB($('tglExtEnc'), (fl & FL.EXTENC));
+        setCB($('tglExtMode'), (fl & FL.EXTMODE));
+        setCB($('tglEndstop'), (fl & FL.ENDSTOP));
+        setCB($('tglEncInvert'), (fl & FL.ENCINV));
+        setCB($('tglDirInvert'), (fl & FL.DIRINV));
+
+        // Scalars
+        if (st.microsteps != null) $('ms').value = String(st.microsteps);
+        if (st.stepsPerRev != null) $('spr').value = String(st.stepsPerRev);
+        if (st.currentmA != null) $('inmA').value = String(st.currentmA);
+        if (st.kp != null) $('pidKp').value = st.kp.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
+        if (st.ki != null) $('pidKi').value = st.ki.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
+        if (st.kd != null) $('pidKd').value = st.kd.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
+
+        // Also update labels that depend on units
+        $('activeUnits').textContent = isDeg ? 'deg' : 'rad';
+        $('targetUnits').textContent = isDeg ? 'deg' : 'rad';
+        $('btn90').textContent = isDeg ? '90°' : 'π/2';
+        $('btn180').textContent = isDeg ? '180°' : 'π';
+      }
+
+
+      // Web Serial (single writer + queued writes)
       let port = null, reader = null, rxBuf = new Uint8Array(0);
-      let writer = null;          // single shared writer
-      let writeQueue = Promise.resolve(); // queued writes
+      let writer = null, writeQueue = Promise.resolve();
 
       $('btnConnect').onclick = async () => {
         try {
           if (!('serial' in navigator)) { setStatus('Use Chrome/Edge.'); return; }
           if (port) {
-            try {
-              if (writer) { try { await writer.close?.(); } catch { } try { writer.releaseLock(); } catch { } writer = null; }
-              reader?.releaseLock();
-              await port.close();
-            } catch { }
+            try { if (writer) { try { await writer.close?.() } catch { } try { writer.releaseLock() } catch { } writer = null; } reader?.releaseLock(); await port.close(); } catch { }
             port = null; setStatus('Disconnected'); $('btnConnect').textContent = 'Connect'; logInfo('Disconnected'); return;
           }
-          // @ts-ignore
           port = await navigator.serial.requestPort();
           await port.open({ baudRate: 115200 }); // fixed baud
           writer = port.writable.getWriter();
-
           setStatus('Connected'); $('btnConnect').textContent = 'Disconnect'; logInfo('Connected');
-          $('devSearch').value = ''; filterList();
-
+          devSearch.value = ''; filterList();
           reader = port.readable.getReader();
           (async () => { try { for (; ;) { const { value, done } = await reader.read(); if (done) break; if (value && value.length) appendBuf(value); } } catch { } })();
-
-          // @ts-ignore
           navigator.serial.addEventListener('disconnect', e => { if (e.port === port) { $('btnConnect').click(); } });
         } catch (e) { setStatus('Connect failed: ' + (e?.message || e)); }
       };
@@ -897,20 +959,12 @@
         if (!port || !writer) return;
         writeQueue = writeQueue.then(async () => {
           try { await writer.write(u8arr); logTx(u8arr); }
-          catch (e) {
-            const msg = String(e?.message || e);
-            if (msg.includes('WritableStream is locked')) return; // ignore/recover
-            setStatus('Write failed: ' + msg);
-          }
+          catch (e) { const msg = String(e?.message || e); if (msg.includes('WritableStream is locked')) return; setStatus('Write failed: ' + msg); }
         });
         return writeQueue;
       }
 
-      function appendBuf(chunk) {
-        const m = new Uint8Array(rxBuf.length + chunk.length); m.set(rxBuf, 0); m.set(chunk, rxBuf.length);
-        rxBuf = m; processBuf();
-      }
-
+      function appendBuf(chunk) { const m = new Uint8Array(rxBuf.length + chunk.length); m.set(rxBuf, 0); m.set(chunk, rxBuf.length); rxBuf = m; processBuf(); }
       function processBuf() {
         while (rxBuf.length >= 4) {
           const id = rxBuf[0] | (rxBuf[1] << 8), cmd = rxBuf[2], len = rxBuf[3], total = 4 + len;
@@ -923,8 +977,12 @@
               const prev = store.devices.get(p.id) || {};
               const st = { ...prev, units: p.units, speed: p.speed, angle: p.angle, temp: p.temp, min: p.min, max: p.max, cal: p.cal, flags: p.flags, ts: Date.now() };
               store.devices.set(p.id, st);
-
               updateTile(p.id, st);
+              // If active and we don't have config yet, mirror telemetry flags to form now
+              if (store.activeId === p.id) {
+                syncFormFromState(p.id);
+                renderActive();  // updates Units display & quick buttons text
+              }
               if (store.activeId === null) setActive(p.id);
               renderActive(); renderTable(); gate();
               if (!store.requestedCfg.has(p.id)) { store.requestedCfg.add(p.id); sendBytes(frame.getConfig(p.id)); store.lastCfgReqId = p.id; }
@@ -935,18 +993,10 @@
               const devId = store.lastCfgReqId ?? store.activeId;
               if (devId != null) {
                 const prev = store.devices.get(devId) || {};
-                const st = {
-                  ...prev,
-                  stepsPerRev: cfg.stepsPerRev, microsteps: cfg.microsteps, currentmA: cfg.currentmA,
-                  units: cfg.units, flags: cfg.flags, kp: cfg.kp, ki: cfg.ki, kd: cfg.kd, theme: cfg.theme
-                };
+                const st = { ...prev, stepsPerRev: cfg.stepsPerRev, microsteps: cfg.microsteps, currentmA: cfg.currentmA, units: cfg.units, flags: cfg.flags, kp: cfg.kp, ki: cfg.ki, kd: cfg.kd };
                 store.devices.set(devId, st);
                 updateTile(devId, st);
-                if (devId === store.activeId) {
-                  syncFormFromState(devId);
-                  syncThemeFromDeviceOrLocal(devId);
-                  autoFirstSync(devId);
-                }
+                if (devId === store.activeId) { syncFormFromState(devId); }
                 logInfo(`Config applied to ID ${devId}`);
                 renderActive(); gate();
               }
@@ -956,170 +1006,67 @@
         }
       }
 
-      // Flag layout (your mapping)
-      // b0 encInvert, b1 dirInvert, b2 stealthChop, b3 externalMode,
-      // b4 enableEndStop, b5 externalEncoder, b6 calibratedOnce (RO)
-      const FL = {
-        ENCINV: 0x01,
-        DIRINV: 0x02,
-        STEALTH: 0x04,
-        EXTMODE: 0x08,
-        ENDSTOP: 0x10,
-        EXTENC: 0x20,
-        CAL: 0x40,
-      };
-
-      function syncFormFromState(id) {
-        const st = store.devices.get(id); if (!st) return;
-        $('tglUnitsDeg').checked = (st.units === 1);
-        const fl = st.flags ?? 0;
-        $('tglStealth').checked = !!(fl & FL.STEALTH);
-        $('tglExtEnc').checked = !!(fl & FL.EXTENC);
-        $('tglExtMode').checked = !!(fl & FL.EXTMODE);
-        $('tglEndstop').checked = !!(fl & FL.ENDSTOP);
-        $('tglEncInvert').checked = !!(fl & FL.ENCINV);
-        $('tglDirInvert').checked = !!(fl & FL.DIRINV);
-
-        if (st.microsteps != null) $('ms').value = String(st.microsteps);
-        if (st.stepsPerRev != null) $('spr').value = String(st.stepsPerRev);
-        if (st.currentmA != null) $('inmA').value = String(st.currentmA);
-        if (st.kp != null) $('pidKp').value = st.kp.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
-        if (st.ki != null) $('pidKi').value = st.ki.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
-        if (st.kd != null) $('pidKd').value = st.kd.toFixed(3).replace(/\.0+$/, '').replace(/\.$/, '');
-      }
-
-      // First-time auto-sync (apply defaults once)
-      function autoFirstSync(id) {
-        if (store.firstSynced.has(id)) return;
-        const st = store.devices.get(id); if (!st) return;
-
-        // Enable motor by default on first sync
-        $('tglEnable').checked = true; sendBytes(frame.bool1(id, CMD.SET_ENABLED, true));
-
-        // Re-send toggles once to align UI ↔ FW
-        sendBytes(frame.bool1(id, CMD.SET_UNITS, $('tglUnitsDeg').checked));
-        sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, $('tglStealth').checked));
-        sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, $('tglExtEnc').checked));
-        sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, $('tglExtMode').checked));
-        sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, $('tglEndstop').checked));
-        sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, $('tglEncInvert').checked));
-        sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, $('tglDirInvert').checked));
-
-        store.firstSynced.add(id);
-        logInfo(`First-sync defaults applied for ID ${id}`);
-      }
-
-      // Theme sync
-      function syncThemeFromDeviceOrLocal(id) {
-        const st = store.devices.get(id) || {};
-        let themePref = null;
-        if (typeof st.theme === 'number') themePref = st.theme === 0 ? 'dark' : (st.theme === 1 ? 'light' : 'auto');
-        if (!themePref) themePref = loadDeviceTheme(id);
-        if (!themePref) themePref = 'auto';
-        selTheme.value = themePref; applyTheme(themePref);
-      }
-
-      selTheme.addEventListener('change', () => {
-        const t = selTheme.value; applyTheme(t);
-        if (store.activeId != null) {
-          saveDeviceTheme(store.activeId, t);
-          let code = 2; if (t === 'dark') code = 0; else if (t === 'light') code = 1;
-          sendBytes(frame.setTheme(store.activeId, code)); // harmless if FW ignores
-        }
-      });
-
-      // Buttons / Inputs
+      // Buttons / inputs
       $('btnRefreshDevices').onclick = () => { refreshListDevices(); };
       $('btnRefreshList').onclick = () => { refreshListDevices(); };
       devSearch.addEventListener('input', filterList);
 
       inTarget.addEventListener('input', preview);
-      $('btn0').onclick = () => { $('inTarget').value = '0'; preview(); };
-      $('btn90').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; $('inTarget').value = isDeg ? '90' : (Math.PI / 2).toFixed(3); preview(); };
-      $('btn180').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; $('inTarget').value = isDeg ? '180' : (Math.PI).toFixed(3); preview(); };
+      $('btn0').onclick = () => { inTarget.value = '0'; preview(); };
+      $('btn90').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; inTarget.value = isDeg ? '90' : (Math.PI / 2).toFixed(3); preview(); };
+      $('btn180').onclick = () => { const st = store.devices.get(store.activeId); const isDeg = st && st.units === 1; inTarget.value = isDeg ? '180' : (Math.PI).toFixed(3); preview(); };
 
-      $('btnSendTarget').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const val = parseFloat($('inTarget').value) || 0; sendBytes(frame.target(id, val)); };
-      $('btnSendLimits').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const rps = parseFloat($('inRps').value) || 0; const rps2 = parseFloat($('inRps2').value) || 0; sendBytes(frame.speed(id, rps)); sendBytes(frame.accel(id, rps2)); };
-      $('btnSetCurrent').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const ma = parseInt($('inmA').value, 10) || 0; sendBytes(frame.current(id, ma)); };
-      $('btnCal').onclick = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.calibrate(id)); };
-      $('tglEnable').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENABLED, $('tglEnable').checked)); };
+      $('btnSendTarget').onclick = () => { if (store.activeId == null) return; sendBytes(frame.target(store.activeId, parseFloat(inTarget.value) || 0)); };
+      $('btnSendLimits').onclick = () => { if (store.activeId == null) return; const id = store.activeId; const rps = parseFloat(inRps.value) || 0; const rps2 = parseFloat(inRps2.value) || 0; sendBytes(frame.speed(id, rps)); sendBytes(frame.accel(id, rps2)); };
+      $('btnSetCurrent').onclick = () => { if (store.activeId == null) return; sendBytes(frame.current(store.activeId, parseInt(inmA.value, 10) || 0)); };
+      $('btnCal').onclick = () => { if (store.activeId == null) return; sendBytes(frame.calibrate(store.activeId)); };
+      tglEnable.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_ENABLED, tglEnable.checked)); };
 
       $('btnApplyID').onclick = () => {
-        if (store.activeId == null) return;
-        const oldId = store.activeId; const nid = clamp11(parseInt($('newId').value, 10) || 0);
-        if (nid === oldId) return;
+        if (store.activeId == null) return; const oldId = store.activeId; const nid = clamp11(parseInt(newIdEl.value, 10) || 0); if (nid === oldId) return;
         sendBytes(frame.setId(oldId, nid));
-        const st = store.devices.get(oldId) || {};
-        store.devices.delete(oldId); store.devices.set(nid, st);
-        const tile = store.tiles.get(oldId);
-        if (tile) { tile.root.dataset.id = String(nid); tile.idtxt.textContent = '0x' + nid.toString(16).toUpperCase(); store.tiles.delete(oldId); store.tiles.set(nid, tile); }
+        const st = store.devices.get(oldId) || {}; store.devices.delete(oldId); store.devices.set(nid, st);
+        const tile = store.tiles.get(oldId); if (tile) { tile.root.dataset.id = String(nid); tile.idtxt.textContent = '0x' + nid.toString(16).toUpperCase(); store.tiles.delete(oldId); store.tiles.set(nid, tile); }
         setActive(nid);
       };
+      $('btnApplyStepper').onclick = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.microsteps(id, parseInt(msEl.value, 10) || 16)); sendBytes(frame.stepsPerRev(id, parseInt(sprEl.value, 10) || 200)); };
 
-      $('btnApplyStepper').onclick = () => {
-        if (store.activeId == null) return;
-        const id = store.activeId;
-        sendBytes(frame.microsteps(id, parseInt($('ms').value, 10) || 16));
-        sendBytes(frame.stepsPerRev(id, parseInt($('spr').value, 10) || 200));
-      };
+      tglUnitsDeg.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_UNITS, tglUnitsDeg.checked)); renderActive(); };
+      tglStealth.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_STEALTHCHOP, tglStealth.checked)); };
+      tglExtEnc.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_EXT_ENCODER, tglExtEnc.checked)); };
+      tglExtMode.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_EXT_MODE, tglExtMode.checked)); };
+      tglEndstop.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_ENDSTOP, tglEndstop.checked)); };
+      tglEncInvert.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_ENC_INVERT, tglEncInvert.checked)); };
+      tglDirInvert.onchange = () => { if (store.activeId == null) return; sendBytes(frame.bool1(store.activeId, CMD.SET_DIR_INVERT, tglDirInvert.checked)); };
 
-      $('tglUnitsDeg').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_UNITS, $('tglUnitsDeg').checked)); renderActive(); };
-      $('tglStealth').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_STEALTHCHOP, $('tglStealth').checked)); };
-      $('tglExtEnc').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_ENCODER, $('tglExtEnc').checked)); };
-      $('tglExtMode').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_EXT_MODE, $('tglExtMode').checked)); };
-      $('tglEndstop').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENDSTOP, $('tglEndstop').checked)); };
-      $('tglEncInvert').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_ENC_INVERT, $('tglEncInvert').checked)); };
-      $('tglDirInvert').onchange = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.bool1(id, CMD.SET_DIR_INVERT, $('tglDirInvert').checked)); };
-
-      $('btnApplyPID').onclick = () => {
-        if (store.activeId == null) return;
-        const id = store.activeId;
-        sendBytes(frame.pid(id, parseFloat($('pidKp').value) || 0, parseFloat($('pidKi').value) || 0, parseFloat($('pidKd').value) || 0));
-      };
+      $('btnApplyPID').onclick = () => { if (store.activeId == null) return; const id = store.activeId; sendBytes(frame.pid(id, parseFloat(pidKp.value) || 0, parseFloat(pidKi.value) || 0, parseFloat(pidKd.value) || 0)); };
 
       $('btnDoHome').onclick = () => {
-        if (store.activeId == null) return;
-        const id = store.activeId;
-        const params = { useMINTrigger: $('homeUseMin').checked, offset: parseFloat($('homeOffset').value) || 0, activeLow: $('homeActiveLow').checked, speed: parseFloat($('homeSpeed').value) || 0, direction: $('homeDirPlus').checked };
+        if (store.activeId == null) return; const id = store.activeId;
+        const params = { useMINTrigger: homeUseMin.checked, offset: parseFloat(homeOffset.value) || 0, activeLow: homeActiveLow.checked, speed: parseFloat(homeSpeed.value) || 0, direction: homeDirPlus.checked };
         sendBytes(frame.homing(id, params));
       };
 
       $('btnSequential').onclick = async () => {
-        const ids = [...store.devices.keys()].sort((a, b) => a - b);
-        const start = clamp11(parseInt($('bulkStart').value, 10) || 1);
+        const ids = [...store.devices.keys()].sort((a, b) => a - b); const start = clamp11(parseInt($('bulkStart').value, 10) || 1);
         for (let i = 0; i < ids.length; i++) {
-          const cur = ids[i], target = clamp11(start + i);
-          if (cur === target) continue;
+          const cur = ids[i], target = clamp11(start + i); if (cur === target) continue;
           await sendBytes(frame.setId(cur, target));
-          const st = store.devices.get(cur) || {};
-          store.devices.delete(cur); store.devices.set(target, st);
-          const tile = store.tiles.get(cur);
-          if (tile) { tile.root.dataset.id = String(target); tile.idtxt.textContent = '0x' + target.toString(16).toUpperCase(); store.tiles.delete(cur); store.tiles.set(target, tile); }
+          const st = store.devices.get(cur) || {}; store.devices.delete(cur); store.devices.set(target, st);
+          const tile = store.tiles.get(cur); if (tile) { tile.root.dataset.id = String(target); tile.idtxt.textContent = '0x' + target.toString(16).toUpperCase(); store.tiles.delete(cur); store.tiles.set(target, tile); }
         }
-        refreshListDevices();
-        setStatus('Sequential IDs applied');
+        refreshListDevices(); setStatus('Sequential IDs applied');
       };
 
-      $('btnClear').onclick = () => { $('log').textContent = ''; };
-      $('btnSave').onclick = () => {
-        const lines = Array.from($('log').children).map(el => el.textContent || '');
-        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'can_log.txt'; a.click(); URL.revokeObjectURL(url);
-      };
+      $('btnClear').onclick = () => { logEl.textContent = ''; };
+      $('btnSave').onclick = () => { const lines = Array.from(logEl.children).map(el => el.textContent || ''); const blob = new Blob([lines.join('\n')], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'can_log.txt'; a.click(); URL.revokeObjectURL(url); };
       $('btnExport').onclick = () => {
-        const rows = [['id', 'units', 'speed', 'angle', 'temp', 'min', 'max', 'cal', 'last_seen']];
-        [...store.devices.keys()].sort((a, b) => a - b).forEach(id => {
-          const s = store.devices.get(id) || {};
-          rows.push([id, s.units === 1 ? 'deg' : 'rad', s.speed ?? '', s.angle ?? '', s.temp ?? '', s.min ?? '', s.max ?? '', s.cal ? '1' : '0', s.ts ? new Date(s.ts).toISOString() : '']);
-        });
-        const csv = rows.map(r => r.map(x => String(x)).join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
+        const rows = [['id', 'units', 'speed', 'angle', 'temp', 'min', 'max', 'cal', 'last_seen']];[...store.devices.keys()].sort((a, b) => a - b).forEach(id => { const s = store.devices.get(id) || {}; rows.push([id, s.units === 1 ? 'deg' : 'rad', s.speed ?? '', s.angle ?? '', s.temp ?? '', s.min ?? '', s.max ?? '', s.cal ? '1' : '0', s.ts ? new Date(s.ts).toISOString() : '']); });
+        const csv = rows.map(r => r.map(x => String(x)).join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'devices.csv'; a.click(); URL.revokeObjectURL(url);
       };
 
       // Initial paint
-      renderTable(); gate(); applyTheme('auto');
+      renderTable(); gate();
     })();
   </script>
 </body>
